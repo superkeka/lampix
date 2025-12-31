@@ -10,7 +10,7 @@
     function startPlugin() {
         window.plugin_netflix_theme_ready = true;
 
-        var cssUrl = './plugins/netflix-theme/netflix.css';
+        var cssUrl = 'https://superkeka.github.io/lampix/netflix.css';
         var linkId = 'netflix-theme-style';
 
         var defaultSettings = {
