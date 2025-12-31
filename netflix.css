@@ -1186,3 +1186,24 @@ body:has(.items-line[data-row-name="netflix_hero"]) .scroll--mask {
     -webkit-mask-image: unset !important;
     mask-image: unset !important;
 }
+/* === Tizen (SmartTV) Optimizations === */
+.netflix-tizen .card,
+.netflix-tizen .card__body,
+.netflix-tizen .card__view,
+.netflix-tizen .card__title {
+    transition: none !important; /* Disable transitions for max FPS */
+}
+
+.netflix-tizen .card:hover,
+.netflix-tizen .card.focus,
+.netflix-tizen .card.hover {
+    transform: none !important; /* Disable scale */
+    z-index: 10 !important;
+}
+
+.netflix-tizen .card:hover .card__body,
+.netflix-tizen .card.focus .card__body,
+.netflix-tizen .card.hover .card__body {
+     /* Simplified shadow for Tizen */
+    box-shadow: 0 0 0 4px var(--netflix-red) !important;
+}
