@@ -516,6 +516,29 @@
                     this.iframe.setAttribute('frameborder', '0');
                     this.iframe.setAttribute('allow', 'autoplay; encrypted-media');
                     this.iframe.style.cssText = 'position: absolute; top: 50%; left: 50%; width: 177.77%; height: 177.77%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s ease; z-index: 1; pointer-events: none; border-radius: 14px;';
+
+                    // Listen for YouTube errors
+                    window.addEventListener('message', function (event) {
+                        try {
+                            if (event.origin.indexOf('youtube.com') !== -1) {
+                                var data = JSON.parse(event.data);
+                                if (data.event === 'infoDelivery' && data.info && data.info.error) {
+                                    var error = data.info.error;
+                                    var code = typeof error === 'object' ? error.code : error;
+                                    console.error('Netflix Hero: YouTube Player Error', code, data);
+
+                                    // Optional: Notify Lampa notification system
+                                    if (typeof Lampa !== 'undefined' && Lampa.Noty) {
+                                        // Only show specific critical errors to user if needed, or just log
+                                        // 150/101 = Restricted
+                                        // 153 = Config error
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            // Ignore parse errors from other messages
+                        }
+                    });
                 }
             },
 
@@ -577,8 +600,8 @@
                 }
 
                 // Update src
-                var origin = window.location.origin;
-                var src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=' + key + '&start=7&origin=' + origin;
+                // Added enablejsapi=1 to receive error messages
+                var src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + key + '&start=7&enablejsapi=1';
 
                 // Only update src if changed to avoid reloading
                 if (this.iframe.src !== src) {
