@@ -17,7 +17,8 @@
             enabled: false,
             header_style: true,
             hero_enabled: true,
-            hide_anime_in_hero: true
+            hide_anime_in_hero: true,
+            video_enabled: false
         };
 
         function getSettings() {
@@ -33,6 +34,9 @@
                     }
                     if (parsed.hide_anime_in_hero === undefined) {
                         parsed.hide_anime_in_hero = true;
+                    }
+                    if (parsed.video_enabled === undefined) {
+                        parsed.video_enabled = false;
                     }
                     return parsed;
                 } catch (e) { }
@@ -507,42 +511,53 @@
             currentCard: null,
             timer: null,
             cache: {},
+            // Tizen (Samsung TV) and some webOS versions fail to handle iframe re-parenting (recycling).
+            // contentDocument becomes null or black screen appears.
+            // We disable recycling for these platforms.
+            isSmartTV: /Tizen|Web0S|SmartTV|SMART-TV/i.test(navigator.userAgent),
 
             init: function () {
-                // Create shared iframe once
+                // If SmartTV, we don't create a persistent iframe here.
+                // We create it on demand in show()
+                if (this.isSmartTV) return;
+
+                // Create shared iframe once for desktop/mobile
                 if (!this.iframe) {
-                    this.iframe = document.createElement('iframe');
-                    this.iframe.className = 'hero-trailer-video';
-                    this.iframe.setAttribute('title', 'YouTube video player');
-                    this.iframe.setAttribute('frameborder', '0');
-                    // Official recommend: accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share
-                    this.iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
-                    this.iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-                    this.iframe.style.cssText = 'position: absolute; top: 50%; left: 50%; width: 177.77%; height: 177.77%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s ease; z-index: 1; pointer-events: none; border-radius: 14px;';
-
-                    // Listen for YouTube errors
-                    window.addEventListener('message', function (event) {
-                        try {
-                            if (event.origin.indexOf('youtube.com') !== -1) {
-                                var data = JSON.parse(event.data);
-                                if (data.event === 'infoDelivery' && data.info && data.info.error) {
-                                    var error = data.info.error;
-                                    var code = typeof error === 'object' ? error.code : error;
-                                    console.error('Netflix Hero: YouTube Player Error', code, data);
-
-                                    // Optional: Notify Lampa notification system
-                                    if (typeof Lampa !== 'undefined' && Lampa.Noty) {
-                                        // Only show specific critical errors to user if needed, or just log
-                                        // 150/101 = Restricted
-                                        // 153 = Config error
-                                    }
-                                }
-                            }
-                        } catch (e) {
-                            // Ignore parse errors from other messages
-                        }
-                    });
+                    this.createIframe();
                 }
+            },
+
+            createIframe: function () {
+                var iframe = document.createElement('iframe');
+                iframe.className = 'hero-trailer-video';
+                iframe.setAttribute('title', 'YouTube video player'); // Official
+                iframe.setAttribute('frameborder', '0');
+                // Official recommend: accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share
+                iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+                iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); // Official
+                iframe.style.cssText = 'position: absolute; top: 50%; left: 50%; width: 177.77%; height: 177.77%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s ease; z-index: 1; pointer-events: none; border-radius: 14px;';
+
+                // Keep reference if not SmartTV, or return it
+                if (!this.isSmartTV) {
+                    this.iframe = iframe;
+                    this.attachErrorListener();
+                }
+                return iframe;
+            },
+
+            attachErrorListener: function () {
+                window.addEventListener('message', function (event) {
+                    try {
+                        if (event.origin.indexOf('youtube.com') !== -1) {
+                            var data = JSON.parse(event.data);
+                            if (data.event === 'infoDelivery' && data.info && data.info.error) {
+                                var error = data.info.error;
+                                var code = typeof error === 'object' ? error.code : error;
+                                console.error('Netflix Hero: YouTube Player Error', code, data);
+                            }
+                        }
+                    } catch (e) { }
+                });
             },
 
             load: function (card, itemId, mediaType) {
@@ -587,35 +602,55 @@
                 var _this = this;
                 if (!card.classList.contains('focus')) return;
 
-                // Ensure init
+                // Ensure init (creates iframe for desktop, does nothing for SmartTV)
                 this.init();
 
-                // Move iframe to new card
+                var iframeToUse = this.iframe;
+
+                // For SmartTV, create fresh iframe every time
+                if (this.isSmartTV) {
+                    iframeToUse = this.createIframe();
+                    // Store as current for this instance (but not global singleton)
+                    this.activeSmartTVIframe = iframeToUse;
+                }
+
+                if (!iframeToUse) return;
+
+                // Move iframe to new card (or append new one)
                 var cardView = card.querySelector('.card__view');
                 if (!cardView) return;
 
                 // Reset state
-                this.iframe.style.opacity = '0';
+                iframeToUse.style.opacity = '0';
 
                 // If moving to a new parent, append it
-                if (this.iframe.parentNode !== cardView) {
-                    cardView.appendChild(this.iframe);
+                if (iframeToUse.parentNode !== cardView) {
+                    cardView.appendChild(iframeToUse);
                 }
 
                 // Update src
-                // Added enablejsapi=1 to receive error messages
-                var src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + key + '&start=7&enablejsapi=1';
+                var src;
+                if (this.isSmartTV) {
+                    // Use Proxy Player for Tizen/WebOS to fix Error 153 (Origin issue)
+                    src = 'https://superkeka.github.io/lampix/player.html?video_id=' + key + '&start=7';
+
+                    // Listen for messages from proxy (if not already attached via createIframe loop)
+                    // Note: proxy creates its own iframe, so we listen on window as before
+                } else {
+                    // Standard Embed for Desktop/Mobile
+                    src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + key + '&start=7&enablejsapi=1';
+                }
 
                 // Only update src if changed to avoid reloading
-                if (this.iframe.src !== src) {
-                    this.iframe.src = src;
+                if (iframeToUse.src !== src) {
+                    iframeToUse.src = src;
                 }
 
                 // Show after small delay to allow buffer
-                this.iframe.onload = function () {
+                iframeToUse.onload = function () {
                     setTimeout(function () {
                         if (_this.currentCard === card && card.classList.contains('focus')) {
-                            _this.iframe.style.opacity = '1';
+                            iframeToUse.style.opacity = '1';
                             // Dim backdrop
                             var backdrop = card.querySelector('.card__img');
                             if (backdrop) backdrop.style.opacity = '0.3';
@@ -625,13 +660,19 @@
             },
 
             hide: function (card) {
-                if (this.iframe) {
-                    this.iframe.style.opacity = '0';
-                    // Do not remove from DOM immediately to avoid reconstruction cost, 
-                    // just hide. It will be moved when needed.
+                var iframeToHide = this.isSmartTV ? this.activeSmartTVIframe : this.iframe;
 
-                    // Stop video to save resources (reset src)
-                    // this.iframe.src = ''; // Optional: creates black flash, better to just hide
+                if (iframeToHide) {
+                    iframeToHide.style.opacity = '0';
+
+                    if (this.isSmartTV) {
+                        // On SmartTV, completely remove the iframe
+                        iframeToHide.remove();
+                        this.activeSmartTVIframe = null;
+                    } else {
+                        // On Desktop, keep it effectively hidden/ready
+                        // Do not remove to save reconstruction cost
+                    }
                 }
 
                 var backdrop = card.querySelector('.card__img');
@@ -658,6 +699,10 @@
 
                 // Use debounce timer
                 if (this.timer) clearTimeout(this.timer);
+
+                // Check settings before scheduling
+                if (!getSettings().video_enabled) return;
+
                 this.timer = setTimeout(function () {
                     if (heroItemsData[index]) {
                         _this.load(card, heroItemsData[index].id, heroItemsData[index].type);
@@ -1057,6 +1102,24 @@
                             }, 100);
                         }
                     }
+                }
+            });
+
+            Lampa.SettingsApi.addParam({
+                component: 'netflix_theme',
+                param: {
+                    name: 'netflix_video_enabled',
+                    type: 'trigger',
+                    default: false
+                },
+                field: {
+                    name: 'Видео в Hero',
+                    description: 'Проигрывать трейлеры в Hero баннере'
+                },
+                onChange: function (value) {
+                    var settings = getSettings();
+                    settings.video_enabled = (value === true || value === 'true');
+                    saveSettings(settings);
                 }
             });
         }
