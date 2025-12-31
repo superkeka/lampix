@@ -112,7 +112,8 @@ a:hover,
     transform-origin: center center !important;
     position: relative !important;
     border-radius: 12px !important;
-    will-change: transform;
+    border-radius: 12px !important;
+    /* Removed will-change for performance on Tizen */
 }
 
 .card__body {
@@ -581,7 +582,8 @@ html {
 .items-line {
     animation: fadeInRow 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     opacity: 0;
-    will-change: opacity, transform;
+    animation: fadeInRow 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    opacity: 0;
 }
 
 @keyframes fadeInRow {
