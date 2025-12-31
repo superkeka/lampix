@@ -830,75 +830,7 @@
             }
         }
 
-        // Focus handlers for Hero cards (with namespace for cleanup)
-        function attachHeroFocusHandlers() {
-            var heroCards = document.querySelectorAll('.items-line[data-row-name="netflix_hero"] .card--wide');
 
-            heroCards.forEach(function (card, index) {
-                // On click/Enter - open details page
-                $(card).on('hover:enter.netflix-hero', function () {
-                    if (!heroItemsData[index]) return;
-
-                    var itemData = heroItemsData[index];
-                    var movieData = itemData.data;
-
-                    if (typeof Lampa !== 'undefined' && typeof Lampa.Activity !== 'undefined') {
-                        Lampa.Activity.push({
-                            url: '',
-                            component: 'full',
-                            id: itemData.id,
-                            method: itemData.type,
-                            card: movieData,
-                            source: 'tmdb'
-                        });
-                    }
-                });
-
-                // On focus
-                $(card).on('hover:focus.netflix-hero', function () {
-                    // Hide all trailers on focus change
-                    hideAllHeroTrailers();
-
-                    // Clear all timers
-                    Object.keys(heroTrailerTimers).forEach(function (key) {
-                        if (heroTrailerTimers[key]) {
-                            clearTimeout(heroTrailerTimers[key]);
-                        }
-                    });
-
-                    // Start timer for 2 seconds for current card
-                    heroTrailerTimers[index] = setTimeout(function () {
-                        loadHeroTrailer(card, index);
-                    }, 2000);
-                });
-
-                // On blur
-                $(card).on('hover:blur.netflix-hero', function () {
-                    // Clear timer
-                    if (heroTrailerTimers[index]) {
-                        clearTimeout(heroTrailerTimers[index]);
-                        heroTrailerTimers[index] = null;
-                    }
-
-                    // Hide trailer
-                    hideHeroTrailer(card);
-                });
-            });
-
-            // Check if there is already a focused card (initial load)
-            setTimeout(function () {
-                var focusedCard = document.querySelector('.items-line[data-row-name="netflix_hero"] .card--wide.focus');
-                if (focusedCard) {
-                    var focusedIndex = Array.from(heroCards).indexOf(focusedCard);
-                    if (focusedIndex !== -1) {
-                        // Start timer for already focused card
-                        heroTrailerTimers[focusedIndex] = setTimeout(function () {
-                            loadHeroTrailer(focusedCard, focusedIndex);
-                        }, 2000);
-                    }
-                }
-            }, 500);
-        }
 
         // Cleanup Hero card handlers
         function cleanupHeroHandlers() {
