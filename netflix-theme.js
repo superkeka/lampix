@@ -488,6 +488,157 @@
         // Global variable to store Hero items IDs
         var heroItemsData = [];
 
+        // Performance: Debounce utility
+        function debounce(func, wait) {
+            var timeout;
+            return function () {
+                var context = this;
+                var args = arguments;
+                clearTimeout(timeout);
+                timeout = setTimeout(function () {
+                    func.apply(context, args);
+                }, wait);
+            };
+        }
+
+        // Performance: Singleton Trailer Manager
+        var TrailerManager = {
+            iframe: null,
+            currentCard: null,
+            timer: null,
+            cache: {},
+
+            init: function () {
+                // Create shared iframe once
+                if (!this.iframe) {
+                    this.iframe = document.createElement('iframe');
+                    this.iframe.className = 'hero-trailer-video';
+                    this.iframe.setAttribute('frameborder', '0');
+                    this.iframe.setAttribute('allow', 'autoplay; encrypted-media');
+                    this.iframe.style.cssText = 'position: absolute; top: 50%; left: 50%; width: 177.77%; height: 177.77%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s ease; z-index: 1; pointer-events: none; border-radius: 14px;';
+                }
+            },
+
+            load: function (card, itemId, mediaType) {
+                var _this = this;
+
+                // Clear any pending load
+                if (this.timer) clearTimeout(this.timer);
+
+                // If we already have the key cached
+                if (this.cache[itemId]) {
+                    this.show(card, this.cache[itemId]);
+                    return;
+                }
+
+                if (typeof Lampa === 'undefined' || typeof Lampa.Api === 'undefined') return;
+
+                Lampa.Api.sources.tmdb.videos({
+                    id: itemId,
+                    method: mediaType
+                }, function (data) {
+                    if (data && data.results && data.results.length > 0) {
+                        var trailer = data.results.find(function (v) {
+                            return v.type === 'Trailer' && v.site === 'YouTube' && v.official;
+                        }) || data.results.find(function (v) {
+                            return v.type === 'Trailer' && v.site === 'YouTube';
+                        });
+
+                        if (trailer && trailer.key) {
+                            _this.cache[itemId] = trailer.key;
+                            // Only show if the card that requested it is still the current target
+                            if (_this.currentCard === card) {
+                                _this.show(card, trailer.key);
+                            }
+                        }
+                    }
+                }, function () {
+                    // Fail silently
+                });
+            },
+
+            show: function (card, key) {
+                var _this = this;
+                if (!card.classList.contains('focus')) return;
+
+                // Ensure init
+                this.init();
+
+                // Move iframe to new card
+                var cardView = card.querySelector('.card__view');
+                if (!cardView) return;
+
+                // Reset state
+                this.iframe.style.opacity = '0';
+
+                // If moving to a new parent, append it
+                if (this.iframe.parentNode !== cardView) {
+                    cardView.appendChild(this.iframe);
+                }
+
+                // Update src
+                var src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=' + key + '&start=10';
+
+                // Only update src if changed to avoid reloading
+                if (this.iframe.src !== src) {
+                    this.iframe.src = src;
+                }
+
+                // Show after small delay to allow buffer
+                this.iframe.onload = function () {
+                    setTimeout(function () {
+                        if (_this.currentCard === card && card.classList.contains('focus')) {
+                            _this.iframe.style.opacity = '1';
+                            // Dim backdrop
+                            var backdrop = card.querySelector('.card__img');
+                            if (backdrop) backdrop.style.opacity = '0.3';
+                        }
+                    }, 500);
+                };
+            },
+
+            hide: function (card) {
+                if (this.iframe) {
+                    this.iframe.style.opacity = '0';
+                    // Do not remove from DOM immediately to avoid reconstruction cost, 
+                    // just hide. It will be moved when needed.
+
+                    // Stop video to save resources (reset src)
+                    // this.iframe.src = ''; // Optional: creates black flash, better to just hide
+                }
+
+                var backdrop = card.querySelector('.card__img');
+                if (backdrop) backdrop.style.opacity = '1';
+
+                if (this.timer) {
+                    clearTimeout(this.timer);
+                    this.timer = null;
+                }
+                this.currentCard = null;
+            },
+
+            schedule: function (card, index) {
+                var _this = this;
+                // If same card, do nothing
+                if (this.currentCard === card) return;
+
+                // Hide previous
+                if (this.currentCard) {
+                    this.hide(this.currentCard);
+                }
+
+                this.currentCard = card;
+
+                // Use debounce timer
+                if (this.timer) clearTimeout(this.timer);
+                this.timer = setTimeout(function () {
+                    if (heroItemsData[index]) {
+                        _this.load(card, heroItemsData[index].id, heroItemsData[index].type);
+                    }
+                }, 2000);
+            }
+        };
+
         // Hero via standard ContentRows API (one wide element)
         function initHeroRow() {
             if (typeof Lampa === 'undefined' || typeof Lampa.ContentRows === 'undefined') return;
@@ -517,28 +668,11 @@
                             var settings = getSettings();
                             var hideAnime = settings.hide_anime_in_hero;
 
-                            // Filter with backdrop_path, description and good rating (>= 7.0)
-                            var validItems = [];
-                            for (var i = 0; i < json.results.length; i++) {
-                                var item = json.results[i];
-                                // Check language if anime hiding is enabled (ja = Japanese)
+                            // Filter items
+                            var validItems = json.results.filter(function (item) {
                                 var isAnime = hideAnime && item.original_language === 'ja';
-                                if (!isAnime && item.backdrop_path && item.overview && item.overview.length > 0 && item.vote_average >= 7.0) {
-                                    validItems.push(item);
-                                }
-                            }
-
-                            // If few items with rating >= 7.0, take with >= 6.5
-                            if (validItems.length < 3) {
-                                validItems = [];
-                                for (var i = 0; i < json.results.length; i++) {
-                                    var item = json.results[i];
-                                    var isAnime = hideAnime && item.original_language === 'ja';
-                                    if (!isAnime && item.backdrop_path && item.overview && item.overview.length > 0 && item.vote_average >= 6.5) {
-                                        validItems.push(item);
-                                    }
-                                }
-                            }
+                                return !isAnime && item.backdrop_path && item.overview && item.overview.length > 0 && item.vote_average >= 6.5;
+                            });
 
                             if (validItems.length === 0) {
                                 call({ results: [] });
@@ -550,111 +684,75 @@
                                 return (b.vote_average || 0) - (a.vote_average || 0);
                             });
 
-                            // Take top 10 items with best ratings
-                            var topItems = validItems.slice(0, Math.min(10, validItems.length));
-
-                            // Choose 3 random from top 10 (recommendations)
+                            // Optimization: Pick 3 items directly
+                            var count = Math.min(3, validItems.length);
+                            var topItems = validItems.slice(0, 10);
                             var heroItems = [];
-                            var selectedIndices = [];
-                            var count = Math.min(3, topItems.length);
 
-                            for (var i = 0; i < count; i++) {
-                                var randomIndex;
-                                do {
-                                    randomIndex = Math.floor(Math.random() * topItems.length);
-                                } while (selectedIndices.indexOf(randomIndex) !== -1);
+                            // Pick unique random
+                            var indices = new Set();
+                            while (indices.size < count) {
+                                indices.add(Math.floor(Math.random() * Math.min(topItems.length, 10)));
+                            }
 
-                                selectedIndices.push(randomIndex);
-                                var item = topItems[randomIndex];
+                            indices.forEach(function (idx) {
+                                var item = topItems[idx];
                                 item.media_type = mediaType;
                                 heroItems.push(item);
-                            }
+                            });
 
                             console.log('Netflix Hero: Selected ' + heroItems.length + ' items');
 
-                            // Process each item
-                            var processedItems = [];
-                            var processedCount = 0;
-
-                            // Clear old data
-                            heroItemsData = [];
-
-                            function checkComplete() {
-                                processedCount++;
-                                if (processedCount === heroItems.length) {
-                                    call({
-                                        title: 'NETFLIX HERO',
-                                        results: processedItems
-                                    });
-                                    setTimeout(markHeroRow, 100);
-                                }
-                            }
-
-                            heroItems.forEach(function (heroItem) {
-                                Lampa.Api.full({
-                                    id: heroItem.id,
-                                    method: mediaType,
-                                    source: 'tmdb'
-                                }, function (fullData) {
-                                    fullData.media_type = mediaType;
-                                    fullData.params = {
-                                        style: {
-                                            name: 'wide'
-                                        }
-                                    };
-
-                                    if (!fullData.title && !fullData.name) {
-                                        fullData.title = heroItem.title || heroItem.name || 'Unknown';
-                                    }
-                                    if (!fullData.overview) {
-                                        fullData.overview = heroItem.overview || '';
-                                    }
-                                    if (!fullData.backdrop_path && heroItem.backdrop_path) {
-                                        fullData.backdrop_path = heroItem.backdrop_path;
-                                    }
-                                    if (!fullData.backdrop_path && fullData.poster_path) {
-                                        fullData.backdrop_path = fullData.poster_path;
-                                    }
-
-                                    if (fullData.backdrop_path && typeof Lampa.Api !== 'undefined') {
-                                        fullData.img = Lampa.Api.img(fullData.backdrop_path, 'original');
-                                    } else if (fullData.poster_path && typeof Lampa.Api !== 'undefined') {
-                                        fullData.img = Lampa.Api.img(fullData.poster_path, 'w500');
-                                    }
-
-                                    // Save full data for click handling
-                                    heroItemsData.push({
+                            // Parallel loading
+                            var promises = heroItems.map(function (heroItem) {
+                                return new Promise(function (resolve) {
+                                    Lampa.Api.full({
                                         id: heroItem.id,
-                                        type: mediaType,
-                                        data: fullData
-                                    });
+                                        method: mediaType,
+                                        source: 'tmdb'
+                                    }, function (fullData) {
+                                        // Merge data
+                                        fullData.media_type = mediaType;
+                                        fullData.params = { style: { name: 'wide' } };
 
-                                    processedItems.push(fullData);
-                                    checkComplete();
-                                }, function () {
-                                    heroItem.params = {
-                                        style: {
-                                            name: 'wide'
+                                        if (!fullData.title && !fullData.name) fullData.title = heroItem.title || heroItem.name || 'Unknown';
+                                        if (!fullData.overview) fullData.overview = heroItem.overview || '';
+                                        if (!fullData.backdrop_path) fullData.backdrop_path = heroItem.backdrop_path || fullData.poster_path;
+
+                                        if (fullData.backdrop_path) {
+                                            fullData.img = Lampa.Api.img(fullData.backdrop_path, 'original');
                                         }
-                                    };
 
-                                    if (heroItem.backdrop_path && typeof Lampa.Api !== 'undefined') {
-                                        heroItem.img = Lampa.Api.img(heroItem.backdrop_path, 'original');
-                                    } else if (heroItem.poster_path && typeof Lampa.Api !== 'undefined') {
-                                        heroItem.img = Lampa.Api.img(heroItem.poster_path, 'w500');
-                                    }
+                                        resolve({
+                                            clickData: { id: heroItem.id, type: mediaType, data: fullData },
+                                            renderData: fullData
+                                        });
+                                    }, function () {
+                                        // Fallback to basic data
+                                        heroItem.params = { style: { name: 'wide' } };
+                                        if (heroItem.backdrop_path) heroItem.img = Lampa.Api.img(heroItem.backdrop_path, 'original');
 
-                                    // Save full data for click handling
-                                    heroItemsData.push({
-                                        id: heroItem.id,
-                                        type: mediaType,
-                                        data: heroItem
+                                        resolve({
+                                            clickData: { id: heroItem.id, type: mediaType, data: heroItem },
+                                            renderData: heroItem
+                                        });
                                     });
-
-                                    processedItems.push(heroItem);
-                                    checkComplete();
                                 });
                             });
+
+                            Promise.all(promises).then(function (results) {
+                                heroItemsData = results.map(function (r) { return r.clickData; });
+                                var processedItems = results.map(function (r) { return r.renderData; });
+
+                                call({
+                                    title: 'NETFLIX HERO',
+                                    results: processedItems
+                                });
+
+                                // Use requestAnimationFrame for UI update markup
+                                requestAnimationFrame(markHeroRow);
+                            });
+
                         }, function () {
                             call({ results: [] });
                         });
@@ -665,9 +763,13 @@
 
         // Add data-row-name to Hero row
         function markHeroRow() {
-            var lines = document.querySelectorAll('.items-line');
-            for (var i = 0; i < lines.length; i++) {
-                var title = lines[i].querySelector('.items-line__title');
+            // Optimization: select only what we need or check if already marked
+            var title = null;
+            // Most likely it's one of the first few lines
+            var lines = document.querySelectorAll('.items-line:not([data-row-name])');
+
+            for (var i = 0; i < lines.length && i < 5; i++) {
+                title = lines[i].querySelector('.items-line__title');
                 if (title && title.textContent.indexOf('NETFLIX HERO') !== -1) {
                     lines[i].setAttribute('data-row-name', 'netflix_hero');
                     console.log('Netflix Hero: marked row with data-row-name');
@@ -682,138 +784,49 @@
             }
         }
 
-        // Timers and state for trailer autoplay
-        var heroTrailerTimers = {};
-        var heroTrailerCache = {};
+        // Focus handlers for Hero cards
+        function attachHeroFocusHandlers() {
+            var heroCards = document.querySelectorAll('.items-line[data-row-name="netflix_hero"] .card--wide');
+            if (heroCards.length === 0) return;
 
-        // Load and show trailer for Hero card
-        function loadHeroTrailer(card, index) {
-            if (!heroItemsData[index]) return;
+            heroCards.forEach(function (card, index) {
+                // On click/Enter - open details page
+                $(card).on('hover:enter.netflix-hero', function () {
+                    if (!heroItemsData[index]) return;
 
-            var itemId = heroItemsData[index].id;
-            var mediaType = heroItemsData[index].type;
+                    var itemData = heroItemsData[index];
+                    var movieData = itemData.data;
 
-            // Check cache
-            if (heroTrailerCache[itemId]) {
-                showHeroTrailer(card, heroTrailerCache[itemId]);
-                return;
-            }
-
-            // Load trailer via Lampa API
-            if (typeof Lampa === 'undefined' || typeof Lampa.Api === 'undefined') return;
-
-            Lampa.Api.sources.tmdb.videos({
-                id: itemId,
-                method: mediaType
-            }, function (data) {
-                if (data && data.results && data.results.length > 0) {
-                    // Look for trailer (preferably official)
-                    var trailer = data.results.find(function (v) {
-                        return v.type === 'Trailer' && v.site === 'YouTube' && v.official;
-                    }) || data.results.find(function (v) {
-                        return v.type === 'Trailer' && v.site === 'YouTube';
-                    });
-
-                    if (trailer && trailer.key) {
-                        heroTrailerCache[itemId] = trailer.key;
-                        showHeroTrailer(card, trailer.key);
+                    if (typeof Lampa !== 'undefined' && typeof Lampa.Activity !== 'undefined') {
+                        Lampa.Activity.push({
+                            url: '',
+                            component: 'full',
+                            id: itemData.id,
+                            method: itemData.type,
+                            card: movieData,
+                            source: 'tmdb'
+                        });
                     }
-                }
-            }, function (error) {
-                // Error callback - do nothing, just don't show trailer
-                console.log('Netflix Hero: Failed to load trailer for ' + itemId);
-            });
-        }
-
-        // Hide all trailers (fast synchronous animation)
-        function hideAllHeroTrailers() {
-            var allCards = document.querySelectorAll('.items-line[data-row-name="netflix_hero"] .card--wide');
-            allCards.forEach(function (card) {
-                var iframe = card.querySelector('.hero-trailer-video');
-                if (iframe) {
-                    iframe.style.transition = 'opacity 0.3s ease';
-                    iframe.style.opacity = '0';
-                    setTimeout(function () {
-                        if (iframe.parentNode) {
-                            iframe.parentNode.removeChild(iframe);
-                        }
-                    }, 300);
-                }
-
-                // Restore backdrop visibility (synchronously with iframe)
-                var backdropImg = card.querySelector('.card__img');
-                if (backdropImg) {
-                    backdropImg.style.transition = 'opacity 0.3s ease';
-                    backdropImg.style.opacity = '1';
-                }
-            });
-        }
-
-        // Show trailer in Hero card (fast synchronous animation)
-        function showHeroTrailer(card, videoKey) {
-            // Check that card is still focused
-            if (!card.classList.contains('focus')) return;
-
-            // Hide all other trailers
-            hideAllHeroTrailers();
-
-            // Find existing iframe
-            var existingIframe = card.querySelector('.hero-trailer-video');
-            if (existingIframe) {
-                existingIframe.style.opacity = '1';
-                return;
-            }
-
-            // Create iframe for YouTube with synchronous animation
-            var iframe = document.createElement('iframe');
-            iframe.className = 'hero-trailer-video';
-            iframe.src = 'https://www.youtube.com/embed/' + videoKey + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=' + videoKey + '&start=10';
-            iframe.setAttribute('frameborder', '0');
-            iframe.setAttribute('allow', 'autoplay; encrypted-media');
-            iframe.style.cssText = 'position: absolute; top: 50%; left: 50%; width: 177.77%; height: 177.77%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s ease; z-index: 1; pointer-events: none; border-radius: 14px;';
-
-            var cardView = card.querySelector('.card__view');
-            if (cardView) {
-                var backdropImg = card.querySelector('.card__img');
-                cardView.appendChild(iframe);
-
-                // Wait for iframe load and show quickly
-                iframe.addEventListener('load', function () {
-                    // Reduced delay for smoothness
-                    setTimeout(function () {
-                        if (!card.classList.contains('focus')) return;
-
-                        // Show video quickly (synchronously with backdrop)
-                        iframe.style.opacity = '1';
-
-                        // Dim backdrop (synchronously with iframe)
-                        if (backdropImg) {
-                            backdropImg.style.transition = 'opacity 0.3s ease';
-                            backdropImg.style.opacity = '0.3';
-                        }
-                    }, 800); // Reduced delay from 1500ms to 800ms
                 });
-            }
-        }
 
-        // Hide trailer in Hero card (fast synchronous animation)
-        function hideHeroTrailer(card) {
-            var iframe = card.querySelector('.hero-trailer-video');
-            if (iframe) {
-                iframe.style.transition = 'opacity 0.3s ease';
-                iframe.style.opacity = '0';
-                setTimeout(function () {
-                    if (iframe.parentNode) {
-                        iframe.parentNode.removeChild(iframe);
-                    }
-                }, 300);
-            }
+                // On focus - schedule trailer
+                $(card).on('hover:focus.netflix-hero', function () {
+                    TrailerManager.schedule(card, index);
+                });
 
-            // Restore backdrop visibility (synchronously)
-            var backdropImg = card.querySelector('.card__img');
-            if (backdropImg) {
-                backdropImg.style.transition = 'opacity 0.3s ease';
-                backdropImg.style.opacity = '1';
+                // On blur - hide trailer
+                $(card).on('hover:blur.netflix-hero', function () {
+                    TrailerManager.hide(card);
+                });
+            });
+
+            // Initial check
+            var focusedCard = document.querySelector('.items-line[data-row-name="netflix_hero"] .card--wide.focus');
+            if (focusedCard) {
+                var focusedIndex = Array.from(heroCards).indexOf(focusedCard);
+                if (focusedIndex !== -1) {
+                    TrailerManager.schedule(focusedCard, focusedIndex);
+                }
             }
         }
 
@@ -892,17 +905,12 @@
             if (typeof $ !== 'undefined') {
                 $('.items-line[data-row-name="netflix_hero"] .card--wide').off('.netflix-hero');
             }
-
-            // Clear all trailer timers
-            Object.keys(heroTrailerTimers).forEach(function (key) {
-                if (heroTrailerTimers[key]) {
-                    clearTimeout(heroTrailerTimers[key]);
-                }
-            });
-            heroTrailerTimers = {};
-
-            // Hide all trailers
-            hideAllHeroTrailers();
+            // Cleanup manager
+            if (TrailerManager.timer) clearTimeout(TrailerManager.timer);
+            if (TrailerManager.iframe) {
+                TrailerManager.iframe.remove();
+                TrailerManager.iframe = null;
+            }
         }
 
         // Load logos for Hero cards
