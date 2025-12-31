@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Player Proxy</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+        iframe { width: 100%; height: 100%; border: 0; display: block; }
+    </style>
+</head>
+<body>
+    <div id="player"></div>
+    <script>
+        // Parse URL parameters
+        var urlParams = new URLSearchParams(window.location.search);
+        var videoId = urlParams.get('video_id');
+        var start = urlParams.get('start') || 0;
+        
+        // Construct standard YouTube embed URL with strict origin matching this proxy's domain
+        // This ensures YouTube sees a valid HTTP Referrer (this page)
+        if (videoId) {
+            var iframe = document.createElement('iframe');
+            iframe.src = 'https://www.youtube.com/embed/' + videoId + 
+                '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + videoId + 
+                '&start=' + start + 
+                '&enablejsapi=1' +
+                '&origin=' + window.location.origin; // Dynamically set origin to this hosted page
+            
+            iframe.setAttribute('title', 'YouTube video player');
+            iframe.setAttribute('frameborder', '0');
+            iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+            iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+            
+            document.body.appendChild(iframe);
+            
+            // Forward messages from iframe to parent (Lampa)
+            window.addEventListener('message', function(e) {
+                // Post back to parent window
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage(e.data, '*');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
