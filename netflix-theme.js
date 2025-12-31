@@ -517,11 +517,11 @@
             isSmartTV: /Tizen|Web0S|SmartTV|SMART-TV/i.test(navigator.userAgent),
 
             init: function () {
-                // If SmartTV, we don't create a persistent iframe here.
-                // We create it on demand in show()
-                if (this.isSmartTV) return;
+                if (this.isSmartTV) {
+                    document.body.classList.add('netflix-tizen');
+                }
 
-                // Create shared iframe once for desktop/mobile
+                // Create shared iframe once for all platforms
                 if (!this.iframe) {
                     this.createIframe();
                 }
@@ -537,11 +537,9 @@
                 iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); // Official
                 iframe.style.cssText = 'position: absolute; top: 50%; left: 50%; width: 177.77%; height: 177.77%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s ease; z-index: 1; pointer-events: none; border-radius: 14px;';
 
-                // Keep reference if not SmartTV, or return it
-                if (!this.isSmartTV) {
-                    this.iframe = iframe;
-                    this.attachErrorListener();
-                }
+                this.iframe = iframe;
+                this.attachErrorListener();
+
                 return iframe;
             },
 
@@ -551,8 +549,7 @@
                         if (event.origin.indexOf('youtube.com') !== -1) {
                             var data = JSON.parse(event.data);
                             if (data.event === 'infoDelivery' && data.info && data.info.error) {
-                                var error = data.info.error;
-                                var code = typeof error === 'object' ? error.code : error;
+                                var code = typeof data.info.error === 'object' ? data.info.error.code : data.info.error;
                                 console.error('Netflix Hero: YouTube Player Error', code, data);
                             }
                         }
@@ -606,14 +603,6 @@
                 this.init();
 
                 var iframeToUse = this.iframe;
-
-                // For SmartTV, create fresh iframe every time
-                if (this.isSmartTV) {
-                    iframeToUse = this.createIframe();
-                    // Store as current for this instance (but not global singleton)
-                    this.activeSmartTVIframe = iframeToUse;
-                }
-
                 if (!iframeToUse) return;
 
                 // Move iframe to new card (or append new one)
@@ -660,19 +649,9 @@
             },
 
             hide: function (card) {
-                var iframeToHide = this.isSmartTV ? this.activeSmartTVIframe : this.iframe;
-
-                if (iframeToHide) {
-                    iframeToHide.style.opacity = '0';
-
-                    if (this.isSmartTV) {
-                        // On SmartTV, completely remove the iframe
-                        iframeToHide.remove();
-                        this.activeSmartTVIframe = null;
-                    } else {
-                        // On Desktop, keep it effectively hidden/ready
-                        // Do not remove to save reconstruction cost
-                    }
+                if (this.iframe) {
+                    this.iframe.style.opacity = '0';
+                    // We revert to NOT removing the iframe, just hiding it (singleton pattern)
                 }
 
                 var backdrop = card.querySelector('.card__img');
