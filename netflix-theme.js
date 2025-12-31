@@ -513,8 +513,11 @@
                 if (!this.iframe) {
                     this.iframe = document.createElement('iframe');
                     this.iframe.className = 'hero-trailer-video';
+                    this.iframe.setAttribute('title', 'YouTube video player');
                     this.iframe.setAttribute('frameborder', '0');
-                    this.iframe.setAttribute('allow', 'autoplay; encrypted-media');
+                    // Official recommend: accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share
+                    this.iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+                    this.iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
                     this.iframe.style.cssText = 'position: absolute; top: 50%; left: 50%; width: 177.77%; height: 177.77%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s ease; z-index: 1; pointer-events: none; border-radius: 14px;';
 
                     // Listen for YouTube errors
