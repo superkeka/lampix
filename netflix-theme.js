@@ -577,7 +577,8 @@
                 }
 
                 // Update src
-                var src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=' + key + '&start=10';
+                var origin = window.location.origin;
+                var src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + key + '&origin=' + origin;
 
                 // Only update src if changed to avoid reloading
                 if (this.iframe.src !== src) {
