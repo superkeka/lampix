@@ -150,13 +150,6 @@ a:hover,
     border-bottom-color: var(--netflix-red) !important;
 }
 
-/* Hero cards focus indicator - change border color */
-.items-line[data-row-name="netflix_hero"] .card--wide.focus .card__view {
-    border-bottom-color: var(--netflix-red) !important;
-    border-bottom-left-radius: 14px !important;
-    border-bottom-right-radius: 14px !important;
-}
-
 .card.focus .card__body,
 .card.hover .card__body {
     /* Revert glow, keep focus shadow */
@@ -1102,8 +1095,8 @@ html {
     border-radius: 16px !important;
     overflow: hidden !important;
     transform: translateZ(0) !important;
-    /* Always have border to prevent layout shift */
-    border-bottom: 5px solid transparent !important;
+    /* Invisible border for focus - no layout jump */
+    border-bottom: 4px solid transparent !important;
     box-sizing: border-box !important;
 }
 
@@ -1116,20 +1109,28 @@ html {
     border-radius: 16px !important;
 }
 
-/* Simple 2-color bottom gradient (performant for TV) */
+/* Black backdrop for text and logo */
 .items-line[data-row-name="netflix_hero"] .card--wide .card__promo {
+    background-color: #141414 !important;
+}
+
+/* Gradient overlay as pseudo-element (below text/logo) */
+.items-line[data-row-name="netflix_hero"] .card--wide .card__promo::before {
+    content: '' !important;
     position: absolute !important;
     bottom: 0 !important;
     left: 0 !important;
     width: 100% !important;
     height: 100% !important;
     background: linear-gradient(to top, #141414 0%, transparent 50%) !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: flex-end !important;
-    padding: 4vw !important;
-    box-sizing: border-box !important;
-    z-index: 2 !important;
+    z-index: 1 !important;
+    pointer-events: none !important;
+    border-radius: 16px !important;
+}
+
+/* Focus indicator - show red border on focus */
+.items-line[data-row-name="netflix_hero"] .card--wide.focus .card__view {
+    border-bottom-color: var(--netflix-red) !important;
 }
 
 /* Left gradient removed - cleaner look */
@@ -1176,18 +1177,6 @@ html {
 .items-line[data-row-name="netflix_hero"] .card--wide .card__vote,
 .items-line[data-row-name="netflix_hero"] .card--wide .card__quality {
     display: none !important;
-}
-
-/* Focus state */
-.items-line[data-row-name="netflix_hero"] .card--wide.focus {
-    outline: none !important;
-    box-shadow: none !important;
-}
-
-.items-line[data-row-name="netflix_hero"] .card--wide.focus .card__promo {
-    box-shadow: none !important;
-    /* Move border to card__view for better rounding compatibility */
-    border-bottom: none !important;
 }
 
 /* Disable hover zoom and transitions for Hero cards for smooth switching */
@@ -1252,14 +1241,13 @@ body:has(.items-line[data-row-name="netflix_hero"]) .scroll--mask {
 /* Network/Source logo */
 .netflix-hero-network-logo {
     position: absolute;
-    top: 3vw;
-    right: 3vw;
+    top: 2vw;
+    right: 2vw;
     height: 3vw;
     min-height: 28px;
     max-height: 50px;
     max-width: 140px;
     object-fit: contain;
-    opacity: 0.9;
+    filter: brightness(0) invert(1);
     z-index: 100;
-    /* Removed filter: brightness(0) invert(1) - too expensive on TV */
 }
