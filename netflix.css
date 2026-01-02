@@ -26,7 +26,6 @@
 
 /* === Base Styles === */
 body {
-    background-color: var(--netflix-bg) !important;
     color: var(--netflix-text) !important;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
 }
@@ -50,7 +49,7 @@ a:hover,
 
 /* === Menu === */
 .menu {
-    background-color: rgba(20, 20, 20, 0.95) !important;
+    /* Transparent background to support backdrops */
 }
 
 .menu__item {
@@ -81,9 +80,9 @@ a:hover,
 .menu__item.focus .menu__ico svg *,
 .menu__item.active .menu__ico svg,
 .menu__item.active .menu__ico svg * {
-    fill: #000000 !important;
-    stroke: #000000 !important;
-    color: #000000 !important;
+    fill: var(--netflix-red) !important;
+    stroke: var(--netflix-red) !important;
+    color: var(--netflix-red) !important;
 }
 
 /* === Head === */
@@ -113,11 +112,6 @@ a:hover,
     position: relative !important;
     border-radius: 12px !important;
     border-radius: 12px !important;
-    /* Universal optimizations */
-    backface-visibility: hidden !important;
-    -webkit-backface-visibility: hidden !important;
-    transform-style: preserve-3d !important;
-    contain: layout style !important;
 }
 
 .card__body {
@@ -128,18 +122,20 @@ a:hover,
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-/* Card hover/focus effect - Netflix style */
+/* Card hover/focus effect - Standard Lampa (optional scale removal if too much) */
+/* We keep it slightly scaled as it's Netflix-like, but user asked for "standard" except underline */
+/* Standard Lampa actually has basic scaling, so we'll keep it subtle or remove if it feels too much */
 .card:hover,
 .card.focus,
 .card.hover {
-    transform: scale(1.05) translateZ(0) !important;
     z-index: 10 !important;
 }
 
 .card:hover .card__body,
 .card.focus .card__body,
 .card.hover .card__body {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+    /* Standard Lampa shadow or similar */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* Focus indicator - red line at bottom of selected card image */
@@ -150,16 +146,17 @@ a:hover,
     box-sizing: border-box !important;
 }
 
-/* Remove border-bottom for Hero cards */
-.items-line[data-row-name="netflix_hero"] .card--wide.focus .card__view,
-.items-line[data-row-name="netflix_hero"] .card--wide.hover .card__view,
-.items-line[data-row-name="netflix_hero"] .card--wide:hover .card__view {
-    border-bottom: none !important;
+/* Remove border-bottom for Hero cards - we'll handle it specifically for Hero */
+.items-line[data-row-name="netflix_hero"] .card--wide.focus .card__view {
+    border-bottom: 5px solid var(--netflix-red) !important;
+    border-bottom-left-radius: 14px !important;
+    border-bottom-right-radius: 14px !important;
 }
 
 .card.focus .card__body,
 .card.hover .card__body {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(229, 9, 20, 0.5) !important;
+    /* Revert glow, keep focus shadow */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* Card image */
@@ -241,36 +238,16 @@ a:hover,
     color: var(--netflix-text) !important;
 }
 
-/* Content rows - Netflix spacing */
+/* Content rows - Revert to standard */
+/* We keep some vertical spacing but less extreme than before */
 .items-line {
-    margin-bottom: 3vw !important;
-    position: relative !important;
+    margin-bottom: 20px !important;
 }
 
-/* First row - less top spacing */
-.items-line:first-child {
-    margin-top: 0 !important;
-}
-
-.items-line__head {
-    margin-bottom: 0.8em !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-}
-
-/* Card container spacing */
-.items-line .card {
+/* Card container spacing - Standard Lampa handles this, so we remove our forced margins */
+/* .items-line .card {
     margin: 0 0.75rem 0 0 !important;
-}
-
-.items-line .card:first-child {
-    margin-left: 0 !important;
-}
-
-.items-line .card:last-child {
-    margin-right: 0 !important;
-}
+} */
 
 /* Grid layout for cards */
 .items .card {
@@ -279,11 +256,11 @@ a:hover,
 
 /* === Activity/Page === */
 .activitys {
-    background-color: var(--netflix-bg) !important;
+    background-color: transparent !important;
 }
 
 .activitys__slide {
-    background-color: var(--netflix-bg) !important;
+    background-color: transparent !important;
 }
 
 .activitys__body {
@@ -292,7 +269,7 @@ a:hover,
 
 /* === Full Page (Movie/TV Detail) === */
 .full {
-    background-color: var(--netflix-bg) !important;
+    background-color: transparent !important;
 }
 
 .full__body {
@@ -350,7 +327,7 @@ a:hover,
 
 /* === Settings === */
 .settings {
-    background-color: var(--netflix-bg) !important;
+    background-color: transparent !important;
 }
 
 .settings__item {
@@ -432,7 +409,7 @@ a:hover,
 
 /* === Search === */
 .search-box {
-    background-color: rgba(20, 20, 20, 0.98) !important;
+    background-color: transparent !important;
 }
 
 .search__input {
@@ -500,7 +477,7 @@ a:hover,
 
 /* === Navigation Bar (mobile) === */
 .navigation-bar {
-    background-color: var(--netflix-bg) !important;
+    background-color: transparent !important;
     border-top: 1px solid var(--netflix-bg-lighter) !important;
 }
 
@@ -515,7 +492,7 @@ a:hover,
 
 /* === Empty State === */
 .empty {
-    background-color: var(--netflix-bg) !important;
+    background-color: transparent !important;
 }
 
 .empty__text {
@@ -561,7 +538,7 @@ html {
 
 /* === Scroll Container === */
 .scroll--vertical {
-    background-color: var(--netflix-bg) !important;
+    background-color: transparent !important;
 }
 
 .scroll--vertical::-webkit-scrollbar {
@@ -579,7 +556,7 @@ html {
 
 /* === Content Wrapper === */
 .content {
-    background-color: var(--netflix-bg) !important;
+    background-color: transparent !important;
 }
 
 /* === Row Animation === */
@@ -637,7 +614,7 @@ html {
 
 /* === Hide elements that don't fit Netflix style === */
 .loading-layer {
-    background-color: var(--netflix-bg) !important;
+    background-color: transparent !important;
 }
 
 /* === Responsive adjustments === */
@@ -687,16 +664,32 @@ html {
 
 /* === Netflix Header Search Icon === */
 .netflix-search-icon {
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
     cursor: pointer;
-    transition: stroke 0.2s ease;
-    margin-right: 8px;
+    transition: all 0.2s ease;
+    border-radius: 50%;
+    padding: 10px;
+    box-sizing: content-box;
 }
 
-.netflix-search-icon:hover,
+.netflix-search-icon:hover:not(.focus) {
+    stroke: var(--netflix-red) !important;
+}
+
 .netflix-search-icon.focus,
 .netflix-search-icon.active {
+    background-color: #FFFFFF !important;
+    stroke: #000000 !important;
+    border-radius: 9999px !important;
+    padding: 10px 15px !important;
+    /* Slightly narrower than text pills but meaningful */
+    opacity: 1 !important;
+    transform: scale(1.02) !important;
+}
+
+/* Red stroke for hover only if not focused */
+.netflix-search-icon:hover:not(.focus) {
     stroke: #E50914 !important;
 }
 
@@ -789,8 +782,7 @@ html {
     height: 70vh;
     max-height: 800px;
     min-height: 450px;
-    overflow: hidden;
-    border-radius: 14px;
+    overflow: visible !important;
     margin-bottom: 2vw;
     cursor: pointer;
     transition: transform 0.3s ease;
@@ -839,6 +831,27 @@ html {
             rgba(20, 20, 20, 0.4) 60%,
             transparent 100%);
     z-index: 2;
+}
+
+.netflix-hero.focus::before,
+.netflix-hero.focus::after {
+    content: '';
+    position: absolute;
+    left: 1.5em;
+    right: 1.5em;
+    height: 4px;
+    background: #e50914;
+    z-index: 10;
+}
+
+.netflix-hero.focus::before {
+    top: -4px;
+    border-radius: 4px 4px 0 0;
+}
+
+.netflix-hero.focus::after {
+    bottom: -4px;
+    border-radius: 0 0 4px 4px;
 }
 
 /* Content layout (CSS Grid) */
@@ -935,7 +948,7 @@ html {
     color: #ffffff;
     max-width: 40vw;
     margin-bottom: 2vw;
-    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.8);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 /* Mobile responsive */
@@ -1016,17 +1029,17 @@ html {
     display: none !important;
 }
 
-/* Убираем padding у всех контейнеров */
+/* Убираем лишние сбросы отступов, чтобы Hero совпадал с обычными рядами */
 .items-line[data-row-name="netflix_hero"] .scroll,
 .items-line[data-row-name="netflix_hero"] .scroll__content,
 .items-line[data-row-name="netflix_hero"] .items {
-    padding: 0 !important;
-    margin: 0 !important;
+    border-radius: 14px !important;
 }
 
 /* Скрываем overflow чтобы не было видно соседних карточек */
 .items-line[data-row-name="netflix_hero"] .scroll {
-    overflow: hidden !important;
+    overflow: visible !important;
+    border-radius: 14px !important;
 }
 
 /* Псевдоэлемент для правого отступа */
@@ -1048,22 +1061,30 @@ html {
 /* Превращаем wide карточку в Hero */
 .items-line[data-row-name="netflix_hero"] .card--wide {
     position: relative !important;
-    width: calc(100% - 3em) !important;
+    width: 100% !important;
     height: 70vh !important;
     max-height: 800px !important;
     min-height: 450px !important;
-    border-radius: 14px !important;
     overflow: hidden !important;
-    margin: 0 1.5em !important;
-    padding: 0 !important;
-    flex-shrink: 0 !important;
+    /* Force GPU clipping for rounded corners */
+    transform: translateZ(0) !important;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+    mask-image: -webkit-radial-gradient(white, black);
 }
 
-/* На мобильных устройствах - меньше отступы */
+.items-line[data-row-name="netflix_hero"] .card--wide .card__body {
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    background-color: transparent !important;
+    height: 100% !important;
+}
+
+/* На мобильных устройствах - адаптивные стили */
 @media screen and (max-width: 400px) {
     .items-line[data-row-name="netflix_hero"] .card--wide {
-        width: calc(100% - 3em) !important;
-        margin: 0 1.5em !important;
+        width: 100% !important;
     }
 }
 
@@ -1074,7 +1095,9 @@ html {
     height: 100% !important;
     padding-bottom: 0 !important;
     background: transparent !important;
-    border-radius: 14px !important;
+    border-radius: 0 0 14px 14px !important;
+    overflow: hidden !important;
+    transform: translateZ(0) !important;
 }
 
 /* Backdrop image */
@@ -1101,8 +1124,16 @@ html {
     justify-content: flex-end !important;
     padding: 4vw !important;
     box-sizing: border-box !important;
-    border-radius: 14px !important;
     z-index: 2 !important;
+    transform: translateZ(0) !important;
+    overflow: hidden !important;
+}
+
+/* Ensure ALL children of Hero view respect rounding */
+.items-line[data-row-name="netflix_hero"] .card--wide .card__view>*,
+.items-line[data-row-name="netflix_hero"] .card--wide .card__view img,
+.items-line[data-row-name="netflix_hero"] .card--wide .card__view iframe {
+    border-radius: 14px !important;
 }
 
 /* Promo title */
@@ -1111,7 +1142,7 @@ html {
     font-weight: 700 !important;
     line-height: 1.1 !important;
     color: #ffffff !important;
-    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8) !important;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5) !important;
     margin-bottom: 1vw !important;
 }
 
@@ -1147,7 +1178,8 @@ html {
 
 .items-line[data-row-name="netflix_hero"] .card--wide.focus .card__promo {
     box-shadow: none !important;
-    border-bottom: 5px solid var(--netflix-red) !important;
+    /* Move border to card__view for better rounding compatibility */
+    border-bottom: none !important;
 }
 
 /* Disable hover zoom and transitions for Hero cards for smooth switching */
