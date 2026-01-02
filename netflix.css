@@ -107,11 +107,14 @@ a:hover,
 .card {
     background-color: transparent !important;
     overflow: visible !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    /* Optimized: specific property instead of 'all' for better TV performance */
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     transform-origin: center center !important;
     position: relative !important;
     border-radius: 12px !important;
-    border-radius: 12px !important;
+    /* GPU acceleration for smooth animations on TV */
+    will-change: transform !important;
+    transform: translateZ(0) !important;
 }
 
 .card__body {
@@ -119,7 +122,8 @@ a:hover,
     overflow: hidden !important;
     border-radius: 12px !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    /* Optimized: specific property for TV performance */
+    transition: box-shadow 0.3s ease !important;
 }
 
 /* Card hover/focus effect - Standard Lampa (optional scale removal if too much) */
@@ -139,16 +143,16 @@ a:hover,
 }
 
 /* Focus indicator - red line at bottom of selected card image */
+/* Border is always present (transparent), just change color on focus - no layout shift */
 .card.focus .card__view,
 .card.hover .card__view,
 .card:hover .card__view {
-    border-bottom: 4px solid var(--netflix-red) !important;
-    box-sizing: border-box !important;
+    border-bottom-color: var(--netflix-red) !important;
 }
 
-/* Remove border-bottom for Hero cards - we'll handle it specifically for Hero */
+/* Hero cards focus indicator - change border color */
 .items-line[data-row-name="netflix_hero"] .card--wide.focus .card__view {
-    border-bottom: 5px solid var(--netflix-red) !important;
+    border-bottom-color: var(--netflix-red) !important;
     border-bottom-left-radius: 14px !important;
     border-bottom-right-radius: 14px !important;
 }
@@ -162,13 +166,16 @@ a:hover,
 /* Card image */
 .card__img {
     border-radius: 12px !important;
-    transition: all 0.3s ease !important;
+    /* Removed transition: all for better TV performance */
 }
 
 .card__view {
     position: relative !important;
     overflow: hidden !important;
     border-radius: 12px !important;
+    /* Always have border to prevent layout shift, just change color on focus */
+    border-bottom: 4px solid transparent !important;
+    box-sizing: border-box !important;
 }
 
 /* Card title */
@@ -561,8 +568,6 @@ html {
 
 /* === Row Animation === */
 .items-line {
-    animation: fadeInRow 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    opacity: 0;
     animation: fadeInRow 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     opacity: 0;
 }
@@ -1097,6 +1102,9 @@ html {
     border-radius: 16px !important;
     overflow: hidden !important;
     transform: translateZ(0) !important;
+    /* Always have border to prevent layout shift */
+    border-bottom: 5px solid transparent !important;
+    box-sizing: border-box !important;
 }
 
 /* Backdrop image */
@@ -1253,5 +1261,5 @@ body:has(.items-line[data-row-name="netflix_hero"]) .scroll--mask {
     object-fit: contain;
     opacity: 0.9;
     z-index: 100;
-    filter: brightness(0) invert(1);
+    /* Removed filter: brightness(0) invert(1) - too expensive on TV */
 }
