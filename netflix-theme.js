@@ -57,13 +57,14 @@
 
             // Get language for localization
             var lang = (typeof Lampa !== 'undefined' && Lampa.Storage) ?
-                Lampa.Storage.get('language', 'ru') : 'ru';
+                Lampa.Storage.get('language', 'en') : 'en';
 
             var labels = {
                 'ru': { settings: 'Настройки', notifications: 'Уведомления' },
-                'en': { settings: 'Settings', notifications: 'Notifications' }
+                'en': { settings: 'Settings', notifications: 'Notifications' },
+                'uk': { settings: 'Налаштування', notifications: 'Сповіщення' }
             };
-            var texts = labels[lang] || labels['ru'];
+            var texts = labels[lang] || labels['en'];
 
             // Create container
             var container = document.createElement('div');
@@ -504,7 +505,10 @@
             iframe: null,
             currentCard: null,
             timer: null,
+            isPlaying: false,     // Track if video actually started playing
+            currentKey: null,     // Current video key for blocking
             cache: {},
+            blockedVideos: {},    // Cache of blocked video IDs
             // Tizen (Samsung TV) and some webOS versions fail to handle iframe re-parenting (recycling).
             // contentDocument becomes null or black screen appears.
             // We disable recycling for these platforms.
@@ -540,40 +544,81 @@
                         var data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                         if (!data) return;
 
-                        // 1. Handling video play (redundant but good for syncing state)
-                        // onStateChange: 1 (playing) OR infoDelivery + playerState: 1
+                        // Handle video playing - show iframe only when video actually starts
+                        // onStateChange: 1 = playing, or infoDelivery with playerState: 1
                         var isPlaying = (data.event === 'onStateChange' && data.info === 1) ||
                             (data.event === 'infoDelivery' && data.info && data.info.playerState === 1);
 
                         if (isPlaying && _this.currentCard && _this.iframe) {
+                            console.log('Netflix Hero Trailer: Video started playing!');
+                            _this.isPlaying = true;
                             if (_this.timer) clearTimeout(_this.timer);
                             _this.iframe.style.opacity = '1';
                             var backdrop = _this.currentCard.querySelector('.card__img');
                             if (backdrop) backdrop.style.opacity = '0.3';
                         }
 
-                        // 2. Handling errors (including age restricted)
+                        // Handle errors (including age restricted)
                         var isError = (data.event === 'infoDelivery' && data.info && data.info.error) ||
                             (data.event === 'onError');
 
                         if (isError) {
-                            console.error('Netflix Hero: Player Error', data);
-                            if (_this.currentCard) {
-                                Lampa.Noty.show('Трейлер недоступен (ограничение)');
-                                _this.hide(_this.currentCard);
-                            }
+                            console.error('Netflix Hero Trailer: Player Error', data);
+                            _this.markAsBlocked();
                         }
 
-                        // 3. Handling video end (to hide "More Videos")
+                        // Handle video end (to hide "More Videos" screen)
                         var isEnded = (data.event === 'onStateChange' && data.info === 0) ||
                             (data.event === 'infoDelivery' && data.info && data.info.playerState === 0);
 
                         if (isEnded && _this.currentCard) {
-                            console.log('Netflix Hero: Video ended, hiding player');
+                            console.log('Netflix Hero Trailer: Video ended, hiding player');
                             _this.hide(_this.currentCard);
                         }
                     } catch (e) { }
                 });
+            },
+
+            markAsBlocked: function () {
+                if (this.currentKey) {
+                    this.blockedVideos[this.currentKey] = true;
+                    console.log('Netflix Hero Trailer: Marked as blocked:', this.currentKey);
+                }
+                if (this.currentCard) {
+                    this.hide(this.currentCard);
+                }
+            },
+
+            // Check if video is available via YouTube oEmbed API
+            checkVideoAvailable: function (key, onSuccess, onError) {
+                var url = 'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=' + key + '&format=json';
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', url, true);
+                xhr.timeout = 3000; // 3 second timeout
+
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        console.log('Netflix Hero Trailer: Video available:', key);
+                        onSuccess();
+                    } else {
+                        console.warn('Netflix Hero Trailer: Video unavailable (status ' + xhr.status + '):', key);
+                        onError();
+                    }
+                };
+
+                xhr.onerror = function () {
+                    console.warn('Netflix Hero Trailer: oEmbed request failed:', key);
+                    onError();
+                };
+
+                xhr.ontimeout = function () {
+                    console.warn('Netflix Hero Trailer: oEmbed request timeout:', key);
+                    // On timeout, assume available (don't block good videos due to slow network)
+                    onSuccess();
+                };
+
+                xhr.send();
             },
 
             load: function (card, itemId, mediaType) {
@@ -582,53 +627,112 @@
                 // Clear any pending load
                 if (this.timer) clearTimeout(this.timer);
 
+                console.log('Netflix Hero Trailer: Loading for', itemId, mediaType);
+
                 // If we already have the key cached
                 if (this.cache[itemId]) {
+                    console.log('Netflix Hero Trailer: Using cached key', this.cache[itemId]);
                     this.show(card, this.cache[itemId]);
                     return;
                 }
 
-                if (typeof Lampa === 'undefined' || typeof Lampa.Api === 'undefined') return;
+                if (typeof Lampa === 'undefined' || typeof Lampa.Api === 'undefined') {
+                    console.warn('Netflix Hero Trailer: Lampa.Api not available');
+                    return;
+                }
 
                 Lampa.Api.sources.tmdb.videos({
                     id: itemId,
                     method: mediaType
                 }, function (data) {
+                    console.log('Netflix Hero Trailer: API response', data);
+
                     if (data && data.results && data.results.length > 0) {
+                        // Расширенный поиск: Official Trailer → Trailer → Teaser/Clip
                         var trailer = data.results.find(function (v) {
                             return v.type === 'Trailer' && v.site === 'YouTube' && v.official;
                         }) || data.results.find(function (v) {
                             return v.type === 'Trailer' && v.site === 'YouTube';
+                        }) || data.results.find(function (v) {
+                            return v.site === 'YouTube' && (v.type === 'Teaser' || v.type === 'Clip');
                         });
 
                         if (trailer && trailer.key) {
+                            console.log('Netflix Hero Trailer: Found', trailer.type, trailer.name, trailer.key);
                             _this.cache[itemId] = trailer.key;
                             // Only show if the card that requested it is still the current target
                             if (_this.currentCard === card) {
                                 _this.show(card, trailer.key);
                             }
+                        } else {
+                            console.log('Netflix Hero Trailer: No suitable video found in', data.results.length, 'results');
                         }
+                    } else {
+                        console.log('Netflix Hero Trailer: No videos returned for', itemId);
                     }
-                }, function () {
-                    // Fail silently
+                }, function (error) {
+                    console.error('Netflix Hero Trailer: API error for', itemId, error);
                 });
             },
 
             show: function (card, key) {
                 var _this = this;
-                if (!card.classList.contains('focus')) return;
+
+                console.log('Netflix Hero Trailer: show() called with key', key, 'card focused:', card.classList.contains('focus'));
+
+                // Check if video is known to be blocked
+                if (this.blockedVideos[key]) {
+                    console.log('Netflix Hero Trailer: Video known to be blocked, skipping:', key);
+                    return;
+                }
+
+                if (!card.classList.contains('focus')) {
+                    console.log('Netflix Hero Trailer: Card not focused, aborting');
+                    return;
+                }
+
+                // Reset state
+                this.currentKey = key;
+                if (this.timer) clearTimeout(this.timer);
+
+                // First check if video is available via oEmbed API
+                this.checkVideoAvailable(key, function () {
+                    // Video is available - proceed to show
+                    _this.showVideo(card, key);
+                }, function () {
+                    // Video is blocked/unavailable
+                    _this.blockedVideos[key] = true;
+                    console.log('Netflix Hero Trailer: Video blocked, staying on poster');
+                });
+            },
+
+            showVideo: function (card, key) {
+                var _this = this;
+
+                // Re-check conditions after async oEmbed call
+                if (!card.classList.contains('focus') || this.currentKey !== key) {
+                    console.log('Netflix Hero Trailer: Conditions changed, aborting show');
+                    return;
+                }
 
                 // Ensure init (creates iframe for desktop, does nothing for SmartTV)
                 this.init();
 
                 var iframeToUse = this.iframe;
-                if (!iframeToUse) return;
+                if (!iframeToUse) {
+                    console.warn('Netflix Hero Trailer: No iframe available');
+                    return;
+                }
 
                 // Move iframe to new card (or append new one)
                 var cardView = card.querySelector('.card__view');
-                if (!cardView) return;
+                if (!cardView) {
+                    console.warn('Netflix Hero Trailer: No .card__view found');
+                    return;
+                }
 
                 // Reset state
+                this.isPlaying = false;
                 iframeToUse.style.opacity = '0';
 
                 // If moving to a new parent, append it
@@ -638,57 +742,66 @@
 
                 // Update src
                 var src;
+                var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
                 if (this.isSmartTV) {
                     // Use Proxy Player for Tizen/WebOS to fix Error 153 (Origin issue)
                     src = 'https://superkeka.github.io/lampix/player.html?video_id=' + key + '&start=7';
-
-                    // Listen for messages from proxy (if not already attached via createIframe loop)
-                    // Note: proxy creates its own iframe, so we listen on window as before
                 } else {
-                    // Standard Embed for Desktop/Mobile
-                    src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=0&playlist=' + key + '&start=7&enablejsapi=1&disablekb=1&widget_referrer=' + encodeURIComponent(window.location.href);
+                    // Standard YouTube embed
+                    src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + key + '&start=7&enablejsapi=1&disablekb=1&origin=' + encodeURIComponent(origin);
                 }
+
+                console.log('Netflix Hero Trailer: Setting iframe src to', src.substring(0, 80) + '...');
 
                 // Only update src if changed to avoid reloading
                 if (iframeToUse.src !== src) {
                     iframeToUse.src = src;
                 }
 
-                // Show after load (classic way) to ensure it works even if events fail
+                // Show video after iframe loads
                 iframeToUse.onload = function () {
+                    console.log('Netflix Hero Trailer: iframe loaded');
                     setTimeout(function () {
-                        if (_this.currentCard === card && card.classList.contains('focus')) {
+                        if (_this.currentCard === card && card.classList.contains('focus') && _this.currentKey === key) {
+                            console.log('Netflix Hero Trailer: Showing video');
+                            _this.isPlaying = true;
                             iframeToUse.style.opacity = '1';
                             var backdrop = card.querySelector('.card__img');
                             if (backdrop) backdrop.style.opacity = '0.3';
                         }
                     }, 1000);
                 };
-
-                // Safety Check: Hide if error occurs (we detect this via messages above)
-                if (this.timer) clearTimeout(this.timer);
             },
 
             hide: function (card) {
                 if (this.iframe) {
                     this.iframe.style.opacity = '0';
-                    // We revert to NOT removing the iframe, just hiding it (singleton pattern)
                 }
 
-                var backdrop = card.querySelector('.card__img');
-                if (backdrop) backdrop.style.opacity = '1';
+                if (card) {
+                    var backdrop = card.querySelector('.card__img');
+                    if (backdrop) backdrop.style.opacity = '1';
+                }
 
                 if (this.timer) {
                     clearTimeout(this.timer);
                     this.timer = null;
                 }
+                this.isPlaying = false;
+                this.currentKey = null;
                 this.currentCard = null;
             },
 
             schedule: function (card, index) {
                 var _this = this;
+
+                console.log('Netflix Hero Trailer: schedule() called, index:', index, 'video_enabled:', getSettings().video_enabled);
+
                 // If same card, do nothing
-                if (this.currentCard === card) return;
+                if (this.currentCard === card) {
+                    console.log('Netflix Hero Trailer: Same card, skipping');
+                    return;
+                }
 
                 // Hide previous
                 if (this.currentCard) {
@@ -701,11 +814,18 @@
                 if (this.timer) clearTimeout(this.timer);
 
                 // Check settings before scheduling
-                if (!getSettings().video_enabled) return;
+                if (!getSettings().video_enabled) {
+                    console.log('Netflix Hero Trailer: Video disabled in settings');
+                    return;
+                }
+
+                console.log('Netflix Hero Trailer: Will load in 2 seconds...');
 
                 this.timer = setTimeout(function () {
                     if (heroItemsData[index]) {
                         _this.load(card, heroItemsData[index].id, heroItemsData[index].type);
+                    } else {
+                        console.warn('Netflix Hero Trailer: No heroItemsData for index', index);
                     }
                 }, 2000);
             }
@@ -742,7 +862,11 @@
 
                             // Filter items
                             var validItems = json.results.filter(function (item) {
-                                var isAnime = hideAnime && item.original_language === 'ja';
+                                var hasAnimationGenre = item.genre_ids && item.genre_ids.indexOf(16) !== -1;
+
+                                // If has Animation genre - it's anime, filter it out
+                                var isAnime = hideAnime && hasAnimationGenre;
+
                                 return !isAnime && item.backdrop_path && item.overview && item.overview.length > 0 && item.vote_average >= 6.5;
                             });
 
@@ -782,7 +906,10 @@
                                         id: heroItem.id,
                                         method: mediaType,
                                         source: 'tmdb'
-                                    }, function (fullData) {
+                                    }, function (response) {
+                                        // Lampa.Api.full returns { movie: {...} } or { tv: {...} }
+                                        var fullData = response.movie || response.tv || response;
+
                                         // Merge data
                                         fullData.media_type = mediaType;
                                         fullData.params = { style: { name: 'wide' } };
@@ -791,18 +918,25 @@
                                         if (!fullData.overview) fullData.overview = heroItem.overview || '';
                                         if (!fullData.backdrop_path) fullData.backdrop_path = heroItem.backdrop_path || fullData.poster_path;
 
+                                        // Ensure we have ID (fallback to heroItem.id)
+                                        var itemId = fullData.id || heroItem.id;
+
                                         if (fullData.backdrop_path) {
-                                            fullData.img = Lampa.Api.img(fullData.backdrop_path, 'w1280');
+                                            fullData.img = Lampa.Api.img(fullData.backdrop_path, 'original');
                                         }
 
+                                        console.log('Netflix Hero: Full data loaded for', itemId, fullData.title || fullData.name);
+
                                         resolve({
-                                            clickData: { id: heroItem.id, type: mediaType, data: fullData },
+                                            clickData: { id: itemId, type: mediaType, data: fullData },
                                             renderData: fullData
                                         });
                                     }, function () {
                                         // Fallback to basic data
                                         heroItem.params = { style: { name: 'wide' } };
-                                        if (heroItem.backdrop_path) heroItem.img = Lampa.Api.img(heroItem.backdrop_path, 'w1280');
+                                        if (heroItem.backdrop_path) heroItem.img = Lampa.Api.img(heroItem.backdrop_path, 'original');
+
+                                        console.log('Netflix Hero: Using fallback data for', heroItem.id);
 
                                         resolve({
                                             clickData: { id: heroItem.id, type: mediaType, data: heroItem },
@@ -815,6 +949,10 @@
                             Promise.all(promises).then(function (results) {
                                 heroItemsData = results.map(function (r) { return r.clickData; });
                                 var processedItems = results.map(function (r) { return r.renderData; });
+
+                                console.log('Netflix Hero: heroItemsData populated:', heroItemsData.map(function(item) {
+                                    return { id: item.id, type: item.type };
+                                }));
 
                                 call({
                                     title: 'NETFLIX HERO',
@@ -847,9 +985,11 @@
                     lines[i].classList.add('netflix-hero');
                     console.log('Netflix Hero: marked row with data-row-name and class');
 
-                    // Load logos and attach focus handlers
+                    // Load logos, network logos, dots and attach focus handlers
                     setTimeout(function () {
                         loadHeroLogos();
+                        loadNetworkLogos();
+                        createHeroDots();
                         attachHeroFocusHandlers();
                     }, 500);
                     break;
@@ -882,8 +1022,13 @@
                     }
                 });
 
-                // On focus - schedule trailer
+                // On focus - schedule trailer + scroll + update dots
                 $(card).on('hover:focus.netflix-hero', function () {
+                    // Scroll to this card (carousel effect)
+                    card.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+                    // Update dots indicator
+                    updateHeroDots(index);
+                    // Schedule trailer
                     TrailerManager.schedule(card, index);
                 });
 
@@ -916,6 +1061,73 @@
                 TrailerManager.iframe.remove();
                 TrailerManager.iframe = null;
             }
+            // Remove dots
+            var dots = document.querySelector('.netflix-hero-dots');
+            if (dots) dots.remove();
+        }
+
+        // Create dots indicator for hero carousel
+        function createHeroDots() {
+            var heroRow = document.querySelector('.items-line[data-row-name="netflix_hero"]');
+            if (!heroRow || heroRow.querySelector('.netflix-hero-dots')) return;
+
+            var dotsContainer = document.createElement('div');
+            dotsContainer.className = 'netflix-hero-dots';
+
+            heroItemsData.forEach(function (_, index) {
+                var dot = document.createElement('div');
+                dot.className = 'netflix-hero-dot' + (index === 0 ? ' active' : '');
+                dotsContainer.appendChild(dot);
+            });
+
+            heroRow.appendChild(dotsContainer);
+            console.log('Netflix Hero: Created dots indicator');
+        }
+
+        // Update active dot
+        function updateHeroDots(activeIndex) {
+            var dots = document.querySelectorAll('.netflix-hero-dot');
+            dots.forEach(function (dot, i) {
+                dot.classList.toggle('active', i === activeIndex);
+            });
+        }
+
+        // Load network/production company logos
+        function loadNetworkLogos() {
+            var heroCards = document.querySelectorAll('.items-line[data-row-name="netflix_hero"] .card--wide');
+
+            heroCards.forEach(function (card, index) {
+                if (!heroItemsData[index]) return;
+
+                var fullData = heroItemsData[index].data;
+                if (!fullData) return;
+
+                var networkLogo = null;
+
+                // TV shows: use networks
+                if (fullData.networks && fullData.networks.length > 0) {
+                    var network = fullData.networks.find(function (n) { return n.logo_path; });
+                    if (network) networkLogo = network.logo_path;
+                }
+                // Movies: use production_companies
+                else if (fullData.production_companies && fullData.production_companies.length > 0) {
+                    var company = fullData.production_companies.find(function (c) { return c.logo_path; });
+                    if (company) networkLogo = company.logo_path;
+                }
+
+                if (networkLogo) {
+                    var logoImg = document.createElement('img');
+                    logoImg.src = Lampa.Api.img(networkLogo, 'w200');
+                    logoImg.className = 'netflix-hero-network-logo';
+                    logoImg.alt = 'Network';
+                    logoImg.onerror = function () { this.style.display = 'none'; };
+
+                    var promo = card.querySelector('.card__promo');
+                    if (promo) promo.appendChild(logoImg);
+
+                    console.log('Netflix Hero: Added network logo for', fullData.title || fullData.name);
+                }
+            });
         }
 
         // Load logos for Hero cards
@@ -945,7 +1157,10 @@
                 }
 
                 var lang = Lampa.Storage ? Lampa.Storage.get('language', 'ru') : 'ru';
-                var url = Lampa.TMDB.api(mediaType + '/' + itemId + '/images?api_key=' + Lampa.TMDB.key() + '&language=' + lang);
+                // include_image_language важен для получения логотипов на разных языках
+                // null означает "без языка" - универсальные логотипы
+                var imageLangs = [lang, 'en', 'null'].join(',');
+                var url = Lampa.TMDB.api(mediaType + '/' + itemId + '/images?include_image_language=' + imageLangs + '&language=' + lang + '&api_key=' + Lampa.TMDB.key());
 
                 if (typeof Lampa.Network === 'undefined') {
                     titleElement.style.opacity = '1';
@@ -954,21 +1169,30 @@
 
                 Lampa.Network.silent(url, function (data) {
                     if (data && data.logos && data.logos.length > 0) {
-                        var logo = data.logos[0].file_path;
-                        if (logo !== '') {
+                        // Приоритет: 1) текущий язык, 2) английский, 3) null (универсальный), 4) первый доступный
+                        var preferredLogo = data.logos.find(function(l) { return l.iso_639_1 === lang; }) ||
+                                           data.logos.find(function(l) { return l.iso_639_1 === 'en'; }) ||
+                                           data.logos.find(function(l) { return l.iso_639_1 === null; }) ||
+                                           data.logos[0];
+
+                        var logo = preferredLogo.file_path;
+                        if (logo && logo !== '') {
                             var logoUrl = Lampa.TMDB.image('/t/p/w300' + logo.replace('.svg', '.png'));
-                            titleElement.innerHTML = '<img style="max-height: 8vw; max-width: 90%; object-fit: contain;" src="' + logoUrl + '" />';
+                            titleElement.innerHTML = '<img style="max-height: 8vw; max-width: 90%; object-fit: contain;" src="' + logoUrl + '" alt="" />';
                             titleElement.style.opacity = '1';
+                            console.log('Netflix Hero: Logo loaded for ' + itemId + ', lang: ' + preferredLogo.iso_639_1);
                         } else {
                             titleElement.style.opacity = '1';
+                            console.log('Netflix Hero: Empty logo path for ' + itemId);
                         }
                     } else {
                         titleElement.style.opacity = '1';
+                        console.log('Netflix Hero: No logos found for ' + itemId);
                     }
                 }, function (error) {
                     // Error callback - show text title
                     titleElement.style.opacity = '1';
-                    console.log('Netflix Hero: Failed to load logo for ' + itemId);
+                    console.error('Netflix Hero: Failed to load logo for ' + itemId, error);
                 });
             });
         }
@@ -995,6 +1219,59 @@
             enableTheme();
         }
 
+        // Settings localization
+        var settingsLabels = {
+            ru: {
+                componentName: 'LamPix Theme',
+                enableTheme: 'Включить тему',
+                enableThemeDesc: 'Применить стиль Netflix',
+                headerStyle: 'Стиль заголовка',
+                headerStyleDesc: 'Убрать часы и лишние элементы',
+                heroBanner: 'Показать баннер Hero',
+                heroBannerDesc: 'Большой баннер с трендами на главной',
+                hideAnime: 'Скрыть аниме в Hero',
+                hideAnimeDesc: 'Не показывать японские тайтлы в Hero',
+                videoHero: 'Видео в Hero',
+                videoHeroDesc: 'Воспроизводить трейлеры в баннере',
+                reloadNotice: 'Настройки применятся после перезагрузки'
+            },
+            uk: {
+                componentName: 'LamPix Theme',
+                enableTheme: 'Увімкнути тему',
+                enableThemeDesc: 'Застосувати стиль Netflix',
+                headerStyle: 'Стиль заголовка',
+                headerStyleDesc: 'Прибрати годинник та зайві елементи',
+                heroBanner: 'Показати банер Hero',
+                heroBannerDesc: 'Великий банер з трендами на головній',
+                hideAnime: 'Сховати аніме в Hero',
+                hideAnimeDesc: 'Не показувати японські тайтли в Hero',
+                videoHero: 'Відео в Hero',
+                videoHeroDesc: 'Відтворювати трейлери в банері',
+                reloadNotice: 'Налаштування застосуються після перезавантаження'
+            },
+            en: {
+                componentName: 'LamPix Theme',
+                enableTheme: 'Enable Theme',
+                enableThemeDesc: 'Apply Netflix style',
+                headerStyle: 'Header Style',
+                headerStyleDesc: 'Remove clock and extra elements',
+                heroBanner: 'Show Hero Banner',
+                heroBannerDesc: 'Large trending banner on home page',
+                hideAnime: 'Hide Anime in Hero',
+                hideAnimeDesc: 'Do not show Japanese titles in Hero',
+                videoHero: 'Video in Hero',
+                videoHeroDesc: 'Play trailers in Hero banner',
+                reloadNotice: 'Settings will be applied after reload or transition'
+            }
+        };
+
+        function getSettingsLabel(key) {
+            var lang = (typeof Lampa !== 'undefined' && Lampa.Storage) ?
+                Lampa.Storage.get('language', 'en') : 'en';
+            var labels = settingsLabels[lang] || settingsLabels['en'];
+            return labels[key] || settingsLabels['en'][key] || key;
+        }
+
         // Initialize settings
         function initSettings() {
             if (typeof Lampa === 'undefined' || typeof Lampa.SettingsApi === 'undefined') return;
@@ -1002,7 +1279,7 @@
             Lampa.SettingsApi.addComponent({
                 component: 'netflix_theme',
                 icon: '<svg height="24" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="2"/><rect x="7" y="8" width="4" height="8" fill="currentColor"/></svg>',
-                name: 'LamPix Theme'
+                name: getSettingsLabel('componentName')
             });
 
             Lampa.SettingsApi.addParam({
@@ -1013,8 +1290,8 @@
                     default: false
                 },
                 field: {
-                    name: 'Включить тему',
-                    description: 'Применить стиль Netflix'
+                    name: getSettingsLabel('enableTheme'),
+                    description: getSettingsLabel('enableThemeDesc')
                 },
                 onChange: function (value) {
                     var settings = getSettings();
@@ -1034,8 +1311,8 @@
                     default: true
                 },
                 field: {
-                    name: 'Стиль хедера',
-                    description: 'Убрать часы и лишние элементы'
+                    name: getSettingsLabel('headerStyle'),
+                    description: getSettingsLabel('headerStyleDesc')
                 },
                 onChange: function (value) {
                     var settings = getSettings();
@@ -1054,8 +1331,8 @@
                     default: true
                 },
                 field: {
-                    name: 'Показать Hero баннер',
-                    description: 'Большой баннер с трендом на главной странице'
+                    name: getSettingsLabel('heroBanner'),
+                    description: getSettingsLabel('heroBannerDesc')
                 },
                 onChange: function (value) {
                     var settings = getSettings();
@@ -1076,7 +1353,7 @@
                         // Force hide the row if it exists
                         var row = document.querySelector('[data-row-name="netflix_hero"]');
                         if (row) row.style.display = 'none';
-                        Lampa.Noty.show('Настройки применятся после перезагрузки или перехода');
+                        Lampa.Noty.show(getSettingsLabel('reloadNotice'));
                     }
                 }
             });
@@ -1089,8 +1366,8 @@
                     default: true
                 },
                 field: {
-                    name: 'Скрыть аниме в Hero',
-                    description: 'Не показывать японские фильмы/сериалы в Hero баннере'
+                    name: getSettingsLabel('hideAnime'),
+                    description: getSettingsLabel('hideAnimeDesc')
                 },
                 onChange: function (value) {
                     var settings = getSettings();
@@ -1118,8 +1395,8 @@
                     default: false
                 },
                 field: {
-                    name: 'Видео в Hero',
-                    description: 'Проигрывать трейлеры в Hero баннере'
+                    name: getSettingsLabel('videoHero'),
+                    description: getSettingsLabel('videoHeroDesc')
                 },
                 onChange: function (value) {
                     var settings = getSettings();
@@ -1168,3 +1445,4 @@
 
     startPlugin();
 })();
+
