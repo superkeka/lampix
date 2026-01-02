@@ -210,11 +210,26 @@
                 // Show logo
                 showLLogo();
 
-                // NEW: Add text tabs
-                requestAnimationFrame(function () {
-                    createHeaderTabs();
-                    hideHeaderIcons();
-                });
+                // NEW: Add text tabs - wait for app ready on TV
+                function initHeaderTabs() {
+                    requestAnimationFrame(function () {
+                        createHeaderTabs();
+                        hideHeaderIcons();
+                    });
+                }
+
+                if (window.appready) {
+                    initHeaderTabs();
+                } else if (typeof Lampa !== 'undefined' && Lampa.Listener) {
+                    Lampa.Listener.follow('app', function (e) {
+                        if (e.type == 'ready') {
+                            initHeaderTabs();
+                        }
+                    });
+                } else {
+                    // Fallback for edge cases
+                    setTimeout(initHeaderTabs, 1000);
+                }
 
             } else {
                 if (headStyle) {
@@ -364,6 +379,12 @@
                 }
                 .head__actions {
                     margin-left: auto !important;
+                }
+                /* Hide original header icons - CSS fallback for TV */
+                .head__action.open--search,
+                .head__action.open--settings,
+                .head__action.notice--icon {
+                    display: none !important;
                 }
                 /* Hide garland (snow) in Netflix mode */
                 .garland {
@@ -740,16 +761,8 @@
                     cardView.appendChild(iframeToUse);
                 }
 
-                // Update src
-                var src;
-                var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
-                if (this.isSmartTV) {
-                    // Use Proxy Player for Tizen/WebOS to fix Error 153 (Origin issue)
-                    src = 'https://superkeka.github.io/lampix/player.html?video_id=' + key + '&start=7';
-                } else {
-                    // Standard YouTube embed
-                    src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + key + '&start=7&enablejsapi=1&disablekb=1&origin=' + encodeURIComponent(origin);
-                }
+                // Build src URL - direct YouTube embed without origin (works on all platforms)
+                var src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + key + '&start=7&disablekb=1';
 
                 console.log('Netflix Hero Trailer: Setting iframe src to', src.substring(0, 80) + '...');
 
