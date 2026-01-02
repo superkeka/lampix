@@ -782,8 +782,7 @@
                         'start': 5,             // Skip intro
                         'iv_load_policy': 3,    // Hide annotations
                         'cc_load_policy': 0,    // Hide captions
-                        'autohide': 1,          // Auto-hide controls
-                        'origin': window.location.origin  // Set origin for API
+                        'autohide': 1           // Auto-hide controls
                     },
                     events: {
                         onReady: function (event) {
@@ -1383,15 +1382,67 @@
 
                 var networkLogo = null;
 
-                // TV shows: use networks
-                if (fullData.networks && fullData.networks.length > 0) {
-                    var network = fullData.networks.find(function (n) { return n.logo_path; });
-                    if (network) networkLogo = network.logo_path;
+                // Priority streaming providers (from TMDB watch/providers API)
+                var priorityProviderNames = [
+                    'Netflix',
+                    'Amazon Prime Video',
+                    'Apple TV',
+                    'Disney+',
+                    'Hulu',
+                    'HBO Max',
+                    'Max',
+                    'Paramount+',
+                    'Crave',
+                    'Hayu'
+                ];
+
+                // TV shows: use networks with priority
+                var priorityNetworks = ['Netflix', 'HBO', 'Disney+', 'Amazon Prime Video', 'Apple TV+', 'Hulu'];
+                // Priority production companies for movies
+                var priorityCompanies = ['Sony Pictures', 'Warner Bros.', 'Universal Pictures', 'Disney', 'Netflix',
+                                         'Paramount', '20th Century Fox', 'Marvel Studios', 'Pixar', 'Columbia Pictures'];
+
+                // 1. Try watch providers first (flatrate = streaming)
+                if (fullData['watch/providers'] && fullData['watch/providers'].flatrate) {
+                    for (var p = 0; p < priorityProviderNames.length; p++) {
+                        var provider = fullData['watch/providers'].flatrate.find(function (pr) {
+                            return pr.provider_name === priorityProviderNames[p];
+                        });
+                        if (provider && provider.logo_path) {
+                            networkLogo = provider.logo_path;
+                            break;
+                        }
+                    }
                 }
-                // Movies: use production_companies
+                // 2. TV shows: use networks with priority
+                else if (fullData.networks && fullData.networks.length > 0) {
+                    var selectedNetwork = null;
+                    for (var i = 0; i < priorityNetworks.length; i++) {
+                        selectedNetwork = fullData.networks.find(function (n) {
+                            return n.name === priorityNetworks[i] && n.logo_path;
+                        });
+                        if (selectedNetwork) break;
+                    }
+                    // Fallback to first available
+                    if (!selectedNetwork) {
+                        selectedNetwork = fullData.networks.find(function (n) { return n.logo_path; });
+                    }
+                    if (selectedNetwork) networkLogo = selectedNetwork.logo_path;
+                }
+                // 3. Movies: use production_companies with priority
                 else if (fullData.production_companies && fullData.production_companies.length > 0) {
-                    var company = fullData.production_companies.find(function (c) { return c.logo_path; });
-                    if (company) networkLogo = company.logo_path;
+                    var selectedCompany = null;
+                    for (var j = 0; j < priorityCompanies.length; j++) {
+                        selectedCompany = fullData.production_companies.find(function (c) {
+                            return c.name === priorityCompanies[j] && c.logo_path;
+                        });
+                        if (selectedCompany) break;
+                    }
+                    // Fallback to first available
+                    if (!selectedCompany) {
+                        selectedCompany = fullData.production_companies.find(function (c) { return c.logo_path; });
+                    }
+                    if (selectedCompany) networkLogo = selectedCompany.logo_path;
                 }
 
                 if (networkLogo) {
@@ -1724,4 +1775,5 @@
 
     startPlugin();
 })();
+
 
