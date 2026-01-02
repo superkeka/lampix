@@ -489,6 +489,30 @@
                     border-radius: 3px;
                 }
 
+                /* ========== HERO CAROUSEL ========== */
+                .items-line[data-row-name="netflix_hero"] .items-cards {
+                    scroll-behavior: auto !important;
+                    scrollbar-width: none !important;
+                }
+                .items-line[data-row-name="netflix_hero"] .items-cards::-webkit-scrollbar {
+                    display: none !important;
+                }
+                .items-line[data-row-name="netflix_hero"] .items-cards-arrow {
+                    display: none !important;
+                }
+
+                /* Hero focus: ONLY red bottom border */
+                .items-line[data-row-name="netflix_hero"] .card--wide.focus {
+                    outline: none !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                    border-bottom: 4px solid #E50914 !important;
+                }
+                .items-line[data-row-name="netflix_hero"] .card--wide.focus .card__view {
+                    outline: none !important;
+                    box-shadow: none !important;
+                }
+
                 /* Responsive */
                 @media (max-width: 768px) {
                     .items-line__title {
@@ -507,6 +531,12 @@
 
         // Global variable to store Hero items IDs
         var heroItemsData = [];
+        // Track used IDs to avoid duplicates in infinite scroll
+        var heroUsedIds = new Set();
+        // Loading state
+        var heroIsLoading = false;
+        // Current page for loading more
+        var heroCurrentPage = 1;
 
         // Performance: Debounce utility
         function debounce(func, wait) {
@@ -521,83 +551,56 @@
             };
         }
 
-        // Performance: Singleton Trailer Manager
+        // Performance: Singleton Trailer Manager using YT.Player API (like Lampa)
         var TrailerManager = {
-            iframe: null,
+            player: null,           // YT.Player instance
+            playerContainer: null,  // Container div for player
             currentCard: null,
             timer: null,
-            isPlaying: false,     // Track if video actually started playing
-            currentKey: null,     // Current video key for blocking
+            isPlaying: false,
+            currentKey: null,
             cache: {},
-            blockedVideos: {},    // Cache of blocked video IDs
-            // Tizen (Samsung TV) and some webOS versions fail to handle iframe re-parenting (recycling).
-            // contentDocument becomes null or black screen appears.
-            // We disable recycling for these platforms.
-            isSmartTV: /Tizen|Web0S|SmartTV|SMART-TV/i.test(navigator.userAgent),
+            blockedVideos: {},
+            playerId: 'netflix-hero-yt-player',
+
+            // Check if YouTube API is available (loaded in index.html for Tizen/WebOS)
+            isYTAvailable: function () {
+                return typeof YT !== 'undefined' && typeof YT.Player !== 'undefined';
+            },
 
             init: function () {
-                // Create shared iframe once for all platforms
-                if (!this.iframe) {
-                    this.createIframe();
+                // Nothing to pre-init, player created on demand
+            },
+
+            createPlayerContainer: function (cardView) {
+                // Remove existing container if any
+                var existing = document.getElementById(this.playerId);
+                if (existing) existing.remove();
+
+                // Create container div for YT.Player (styles applied via CSS)
+                // visibility: hidden prevents any flash/artifacts during init
+                var container = document.createElement('div');
+                container.id = this.playerId;
+                container.className = 'hero-trailer-video';
+                container.style.cssText = 'opacity: 0; visibility: hidden; transition: opacity 0.5s ease, visibility 0s 0.5s; overflow: hidden;';
+
+                cardView.appendChild(container);
+                this.playerContainer = container;
+
+                // Add styles ONLY for YouTube player container - no global .card--wide styles
+                if (!document.getElementById('netflix-hero-yt-styles')) {
+                    var style = document.createElement('style');
+                    style.id = 'netflix-hero-yt-styles';
+                    style.textContent = [
+                        // YouTube container only
+                        '#' + this.playerId + ' { position: absolute !important; top: 50% !important; left: 50% !important; width: 200% !important; height: 200% !important; transform: translate(-50%, -50%) !important; pointer-events: none !important; z-index: 1 !important; background: transparent !important; }',
+                        '#' + this.playerId + ' iframe { width: 100% !important; height: 100% !important; border: none !important; pointer-events: none !important; outline: none !important; background: transparent !important; }',
+                        '#' + this.playerId + ' * { border: none !important; outline: none !important; background: transparent !important; }'
+                    ].join('\n');
+                    document.head.appendChild(style);
                 }
-            },
 
-            createIframe: function () {
-                var iframe = document.createElement('iframe');
-                iframe.className = 'hero-trailer-video';
-                iframe.setAttribute('title', 'YouTube video player'); // Official
-                iframe.setAttribute('frameborder', '0');
-                // Official recommend: accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share
-                iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
-                iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); // Official
-                iframe.style.cssText = 'position: absolute; top: 50%; left: 50%; width: 177.77%; height: 177.77%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s ease; z-index: 1; pointer-events: none; border-radius: 14px;';
-
-                this.iframe = iframe;
-                this.attachErrorListener();
-
-                return iframe;
-            },
-
-            attachErrorListener: function () {
-                var _this = this;
-                window.addEventListener('message', function (event) {
-                    try {
-                        var data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                        if (!data) return;
-
-                        // Handle video playing - show iframe only when video actually starts
-                        // onStateChange: 1 = playing, or infoDelivery with playerState: 1
-                        var isPlaying = (data.event === 'onStateChange' && data.info === 1) ||
-                            (data.event === 'infoDelivery' && data.info && data.info.playerState === 1);
-
-                        if (isPlaying && _this.currentCard && _this.iframe) {
-                            console.log('Netflix Hero Trailer: Video started playing!');
-                            _this.isPlaying = true;
-                            if (_this.timer) clearTimeout(_this.timer);
-                            _this.iframe.style.opacity = '1';
-                            var backdrop = _this.currentCard.querySelector('.card__img');
-                            if (backdrop) backdrop.style.opacity = '0.3';
-                        }
-
-                        // Handle errors (including age restricted)
-                        var isError = (data.event === 'infoDelivery' && data.info && data.info.error) ||
-                            (data.event === 'onError');
-
-                        if (isError) {
-                            console.error('Netflix Hero Trailer: Player Error', data);
-                            _this.markAsBlocked();
-                        }
-
-                        // Handle video end (to hide "More Videos" screen)
-                        var isEnded = (data.event === 'onStateChange' && data.info === 0) ||
-                            (data.event === 'infoDelivery' && data.info && data.info.playerState === 0);
-
-                        if (isEnded && _this.currentCard) {
-                            console.log('Netflix Hero Trailer: Video ended, hiding player');
-                            _this.hide(_this.currentCard);
-                        }
-                    } catch (e) { }
-                });
+                return container;
             },
 
             markAsBlocked: function () {
@@ -616,7 +619,7 @@
 
                 var xhr = new XMLHttpRequest();
                 xhr.open('GET', url, true);
-                xhr.timeout = 3000; // 3 second timeout
+                xhr.timeout = 3000;
 
                 xhr.onload = function () {
                     if (xhr.status === 200) {
@@ -635,8 +638,7 @@
 
                 xhr.ontimeout = function () {
                     console.warn('Netflix Hero Trailer: oEmbed request timeout:', key);
-                    // On timeout, assume available (don't block good videos due to slow network)
-                    onSuccess();
+                    onSuccess(); // On timeout, assume available
                 };
 
                 xhr.send();
@@ -645,12 +647,10 @@
             load: function (card, itemId, mediaType) {
                 var _this = this;
 
-                // Clear any pending load
                 if (this.timer) clearTimeout(this.timer);
 
                 console.log('Netflix Hero Trailer: Loading for', itemId, mediaType);
 
-                // If we already have the key cached
                 if (this.cache[itemId]) {
                     console.log('Netflix Hero Trailer: Using cached key', this.cache[itemId]);
                     this.show(card, this.cache[itemId]);
@@ -669,7 +669,6 @@
                     console.log('Netflix Hero Trailer: API response', data);
 
                     if (data && data.results && data.results.length > 0) {
-                        // Расширенный поиск: Official Trailer → Trailer → Teaser/Clip
                         var trailer = data.results.find(function (v) {
                             return v.type === 'Trailer' && v.site === 'YouTube' && v.official;
                         }) || data.results.find(function (v) {
@@ -681,7 +680,6 @@
                         if (trailer && trailer.key) {
                             console.log('Netflix Hero Trailer: Found', trailer.type, trailer.name, trailer.key);
                             _this.cache[itemId] = trailer.key;
-                            // Only show if the card that requested it is still the current target
                             if (_this.currentCard === card) {
                                 _this.show(card, trailer.key);
                             }
@@ -701,7 +699,6 @@
 
                 console.log('Netflix Hero Trailer: show() called with key', key, 'card focused:', card.classList.contains('focus'));
 
-                // Check if video is known to be blocked
                 if (this.blockedVideos[key]) {
                     console.log('Netflix Hero Trailer: Video known to be blocked, skipping:', key);
                     return;
@@ -712,16 +709,12 @@
                     return;
                 }
 
-                // Reset state
                 this.currentKey = key;
                 if (this.timer) clearTimeout(this.timer);
 
-                // First check if video is available via oEmbed API
                 this.checkVideoAvailable(key, function () {
-                    // Video is available - proceed to show
                     _this.showVideo(card, key);
                 }, function () {
-                    // Video is blocked/unavailable
                     _this.blockedVideos[key] = true;
                     console.log('Netflix Hero Trailer: Video blocked, staying on poster');
                 });
@@ -730,67 +723,158 @@
             showVideo: function (card, key) {
                 var _this = this;
 
-                // Re-check conditions after async oEmbed call
                 if (!card.classList.contains('focus') || this.currentKey !== key) {
                     console.log('Netflix Hero Trailer: Conditions changed, aborting show');
                     return;
                 }
 
-                // Ensure init (creates iframe for desktop, does nothing for SmartTV)
-                this.init();
-
-                var iframeToUse = this.iframe;
-                if (!iframeToUse) {
-                    console.warn('Netflix Hero Trailer: No iframe available');
+                // Check if YouTube API is available
+                if (!this.isYTAvailable()) {
+                    console.warn('Netflix Hero Trailer: YouTube API not available (YT.Player undefined)');
                     return;
                 }
 
-                // Move iframe to new card (or append new one)
                 var cardView = card.querySelector('.card__view');
                 if (!cardView) {
                     console.warn('Netflix Hero Trailer: No .card__view found');
                     return;
                 }
 
-                // Reset state
+                // Destroy previous player if exists
+                if (this.player) {
+                    try {
+                        this.player.destroy();
+                    } catch (e) {
+                        console.warn('Netflix Hero Trailer: Error destroying player', e);
+                    }
+                    this.player = null;
+                }
+
+                // Create new container in this card
+                this.createPlayerContainer(cardView);
+
                 this.isPlaying = false;
-                iframeToUse.style.opacity = '0';
 
-                // If moving to a new parent, append it
-                if (iframeToUse.parentNode !== cardView) {
-                    cardView.appendChild(iframeToUse);
-                }
+                console.log('Netflix Hero Trailer: Creating YT.Player for', key);
 
-                // Build src URL - direct YouTube embed without origin (works on all platforms)
-                var src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + key + '&start=7&disablekb=1';
+                // Get container dimensions
+                var containerWidth = cardView.offsetWidth || 800;
+                var containerHeight = cardView.offsetHeight || 450;
 
-                console.log('Netflix Hero Trailer: Setting iframe src to', src.substring(0, 80) + '...');
+                // Create YT.Player like Lampa does
+                this.player = new YT.Player(this.playerId, {
+                    width: containerWidth * 1.78,  // 177.77% for zoom effect
+                    height: containerHeight * 1.78,
+                    videoId: key,
+                    playerVars: {
+                        'autoplay': 1,
+                        'mute': 1,
+                        'controls': 0,          // Hide controls
+                        'showinfo': 0,          // Hide title (deprecated but still helps)
+                        'modestbranding': 1,    // Minimal YouTube branding
+                        'disablekb': 1,         // Disable keyboard
+                        'fs': 0,                // Disable fullscreen button
+                        'enablejsapi': 1,       // Enable JS API
+                        'playsinline': 1,       // Play inline on mobile
+                        'rel': 0,               // No related videos at end
+                        'loop': 1,              // Loop video
+                        'playlist': key,        // Required for loop
+                        'start': 5,             // Skip intro
+                        'iv_load_policy': 3,    // Hide annotations
+                        'cc_load_policy': 0,    // Hide captions
+                        'autohide': 1,          // Auto-hide controls
+                        'origin': window.location.origin  // Set origin for API
+                    },
+                    events: {
+                        onReady: function (event) {
+                            console.log('Netflix Hero Trailer: YT.Player ready');
 
-                // Only update src if changed to avoid reloading
-                if (iframeToUse.src !== src) {
-                    iframeToUse.src = src;
-                }
+                            // Update container reference - YT.Player replaces div with iframe
+                            try {
+                                var iframe = event.target.getIframe();
+                                if (iframe) {
+                                    _this.playerContainer = iframe;
+                                    // Minimal styles - main styling via CSS #netflix-hero-yt-styles
+                                    iframe.style.opacity = '0';
+                                    iframe.style.transition = 'opacity 0.5s ease';
+                                    iframe.style.border = 'none';
+                                }
+                            } catch (e) {
+                                console.warn('Netflix Hero Trailer: Could not get iframe', e);
+                            }
 
-                // Show video after iframe loads
-                iframeToUse.onload = function () {
-                    console.log('Netflix Hero Trailer: iframe loaded');
-                    setTimeout(function () {
-                        if (_this.currentCard === card && card.classList.contains('focus') && _this.currentKey === key) {
-                            console.log('Netflix Hero Trailer: Showing video');
-                            _this.isPlaying = true;
-                            iframeToUse.style.opacity = '1';
-                            var backdrop = card.querySelector('.card__img');
-                            if (backdrop) backdrop.style.opacity = '0.3';
+                            event.target.setVolume(0);
+                            event.target.playVideo();
+                        },
+                        onStateChange: function (event) {
+                            console.log('Netflix Hero Trailer: State changed to', event.data);
+
+                            // YT.PlayerState.PLAYING = 1
+                            if (event.data === 1) {
+                                console.log('Netflix Hero Trailer: Video playing!');
+                                _this.isPlaying = true;
+
+                                // Show the iframe - visibility first, then opacity
+                                try {
+                                    var iframe = event.target.getIframe();
+                                    if (iframe) {
+                                        iframe.style.visibility = 'visible';
+                                        iframe.style.transition = 'opacity 0.5s ease';
+                                        iframe.style.opacity = '1';
+                                    }
+                                } catch (e) {}
+
+                                // Also show container
+                                if (_this.playerContainer) {
+                                    _this.playerContainer.style.visibility = 'visible';
+                                    _this.playerContainer.style.transition = 'opacity 0.5s ease';
+                                    _this.playerContainer.style.opacity = '1';
+                                }
+
+                                // Fade out backdrop image to show video behind
+                                var backdrop = card.querySelector('.card__img');
+                                if (backdrop) backdrop.style.opacity = '0';
+                            }
+
+                            // YT.PlayerState.ENDED = 0
+                            if (event.data === 0) {
+                                console.log('Netflix Hero Trailer: Video ended');
+                                // Loop should handle this, but just in case
+                                try {
+                                    event.target.seekTo(5);
+                                    event.target.playVideo();
+                                } catch (e) {}
+                            }
+                        },
+                        onError: function (event) {
+                            console.error('Netflix Hero Trailer: YT.Player error', event.data);
+                            // Error codes: 2 = invalid ID, 5 = HTML5 error, 100 = not found, 101/150 = embedding disabled
+                            _this.markAsBlocked();
                         }
-                    }, 1000);
-                };
+                    }
+                });
             },
 
             hide: function (card) {
-                if (this.iframe) {
-                    this.iframe.style.opacity = '0';
+                // Completely destroy player to stop video and remove all artifacts
+                if (this.player) {
+                    try {
+                        this.player.destroy();
+                    } catch (e) {}
+                    this.player = null;
                 }
 
+                // Remove container completely
+                if (this.playerContainer) {
+                    this.playerContainer.remove();
+                    this.playerContainer = null;
+                }
+
+                // Also remove by ID (in case reference was lost)
+                var existing = document.getElementById(this.playerId);
+                if (existing) existing.remove();
+
+                // Restore backdrop
                 if (card) {
                     var backdrop = card.querySelector('.card__img');
                     if (backdrop) backdrop.style.opacity = '1';
@@ -805,30 +889,41 @@
                 this.currentCard = null;
             },
 
+            destroy: function () {
+                // Use hide() to clean up everything
+                this.hide(this.currentCard);
+
+                // Also remove styles
+                var styles = document.getElementById('netflix-hero-yt-styles');
+                if (styles) styles.remove();
+            },
+
             schedule: function (card, index) {
                 var _this = this;
 
                 console.log('Netflix Hero Trailer: schedule() called, index:', index, 'video_enabled:', getSettings().video_enabled);
 
-                // If same card, do nothing
                 if (this.currentCard === card) {
                     console.log('Netflix Hero Trailer: Same card, skipping');
                     return;
                 }
 
-                // Hide previous
                 if (this.currentCard) {
                     this.hide(this.currentCard);
                 }
 
                 this.currentCard = card;
 
-                // Use debounce timer
                 if (this.timer) clearTimeout(this.timer);
 
-                // Check settings before scheduling
                 if (!getSettings().video_enabled) {
                     console.log('Netflix Hero Trailer: Video disabled in settings');
+                    return;
+                }
+
+                // Check if YT API is available before scheduling
+                if (!this.isYTAvailable()) {
+                    console.warn('Netflix Hero Trailer: YouTube API not loaded, video disabled');
                     return;
                 }
 
@@ -963,6 +1058,12 @@
                                 heroItemsData = results.map(function (r) { return r.clickData; });
                                 var processedItems = results.map(function (r) { return r.renderData; });
 
+                                // Track used IDs for infinite scroll
+                                heroUsedIds.clear();
+                                heroItemsData.forEach(function (item) {
+                                    heroUsedIds.add(item.id);
+                                });
+
                                 console.log('Netflix Hero: heroItemsData populated:', heroItemsData.map(function(item) {
                                     return { id: item.id, type: item.type };
                                 }));
@@ -1010,6 +1111,162 @@
             }
         }
 
+        // Load more hero items and REPLACE existing cards
+        function loadMoreHeroItems(callback) {
+            if (heroIsLoading) return;
+            heroIsLoading = true;
+
+            console.log('Netflix Hero: Loading new items to replace...');
+
+            var mediaType = Math.random() > 0.5 ? 'movie' : 'tv';
+            heroCurrentPage++;
+
+            Lampa.Api.sources.tmdb.get('trending/' + mediaType + '/day', { page: heroCurrentPage }, function (json) {
+                if (!json || !json.results || json.results.length === 0) {
+                    heroIsLoading = false;
+                    return;
+                }
+
+                var settings = getSettings();
+                var hideAnime = settings.hide_anime_in_hero;
+
+                // Filter and exclude already used IDs
+                var validItems = json.results.filter(function (item) {
+                    if (heroUsedIds.has(item.id)) return false;
+                    var hasAnimationGenre = item.genre_ids && item.genre_ids.indexOf(16) !== -1;
+                    var isAnime = hideAnime && hasAnimationGenre;
+                    return !isAnime && item.backdrop_path && item.overview && item.overview.length > 0 && item.vote_average >= 6.5;
+                });
+
+                if (validItems.length < 3) {
+                    // Not enough items, try next page
+                    heroIsLoading = false;
+                    heroCurrentPage++;
+                    loadMoreHeroItems(callback);
+                    return;
+                }
+
+                // Pick 3 random items
+                var newItems = [];
+                var shuffled = validItems.sort(function () { return 0.5 - Math.random(); });
+
+                for (var i = 0; i < 3; i++) {
+                    var item = shuffled[i];
+                    item.media_type = mediaType;
+                    heroUsedIds.add(item.id);
+                    newItems.push(item);
+                }
+
+                // Load full data for each item
+                var promises = newItems.map(function (heroItem) {
+                    return new Promise(function (resolve) {
+                        Lampa.Api.full({
+                            id: heroItem.id,
+                            method: mediaType,
+                            source: 'tmdb'
+                        }, function (response) {
+                            var fullData = response.movie || response.tv || response;
+                            fullData.media_type = mediaType;
+                            fullData.params = { style: { name: 'wide' } };
+                            if (!fullData.title && !fullData.name) fullData.title = heroItem.title || heroItem.name || 'Unknown';
+                            if (!fullData.overview) fullData.overview = heroItem.overview || '';
+                            if (!fullData.backdrop_path) fullData.backdrop_path = heroItem.backdrop_path;
+                            if (fullData.backdrop_path) {
+                                fullData.img = Lampa.Api.img(fullData.backdrop_path, 'original');
+                            }
+                            resolve({
+                                clickData: { id: fullData.id || heroItem.id, type: mediaType, data: fullData },
+                                renderData: fullData
+                            });
+                        }, function () {
+                            heroItem.params = { style: { name: 'wide' } };
+                            if (heroItem.backdrop_path) heroItem.img = Lampa.Api.img(heroItem.backdrop_path, 'original');
+                            resolve({
+                                clickData: { id: heroItem.id, type: mediaType, data: heroItem },
+                                renderData: heroItem
+                            });
+                        });
+                    });
+                });
+
+                Promise.all(promises).then(function (results) {
+                    // REPLACE heroItemsData (not append)
+                    heroItemsData = results.map(function (r) { return r.clickData; });
+
+                    // Get existing cards
+                    var cardsContainer = document.querySelector('.items-line[data-row-name="netflix_hero"] .items-cards');
+                    if (!cardsContainer) {
+                        heroIsLoading = false;
+                        return;
+                    }
+
+                    var existingCards = cardsContainer.querySelectorAll('.card--wide');
+
+                    // Update each card's content (replace innerHTML)
+                    results.forEach(function (r, idx) {
+                        if (existingCards[idx]) {
+                            updateHeroCard(existingCards[idx], r.renderData, idx);
+                        }
+                    });
+
+                    console.log('Netflix Hero: Replaced with ' + results.length + ' new items');
+
+                    // Reload handlers and logos
+                    setTimeout(function () {
+                        reattachHeroFocusHandlers();
+                        loadHeroLogos();
+                        loadNetworkLogos();
+                        heroIsLoading = false;
+
+                        // Focus first card after replacement
+                        var firstCard = cardsContainer.querySelector('.card--wide');
+                        if (firstCard && typeof Lampa !== 'undefined') {
+                            Lampa.Controller.focus(firstCard);
+                        }
+
+                        if (callback) callback();
+                    }, 100);
+                });
+
+            }, function () {
+                heroIsLoading = false;
+            });
+        }
+
+        // Update existing card with new data
+        function updateHeroCard(card, data, index) {
+            var title = data.title || data.name || '';
+            var overview = data.overview || '';
+            if (overview.length > 150) overview = overview.substring(0, 150) + '...';
+            var imgUrl = data.img || (data.backdrop_path ? Lampa.Api.img(data.backdrop_path, 'original') : '');
+
+            // Update image
+            var img = card.querySelector('.card__img');
+            if (img) img.src = imgUrl;
+
+            // Update promo content
+            var promoTitle = card.querySelector('.card__promo-title');
+            if (promoTitle) promoTitle.textContent = title;
+
+            var promoText = card.querySelector('.card__promo-text');
+            if (promoText) promoText.textContent = overview;
+
+            // Remove old logo if exists
+            var oldLogo = card.querySelector('.card__logo');
+            if (oldLogo) oldLogo.remove();
+
+            // Update data attribute
+            card.setAttribute('data-index', index);
+        }
+
+        // Reattach handlers after updating cards
+        function reattachHeroFocusHandlers() {
+            // Remove old handlers
+            $('.items-line[data-row-name="netflix_hero"] .card--wide').off('.netflix-hero');
+            // Reattach
+            attachHeroFocusHandlers();
+        }
+
         // Focus handlers for Hero cards
         function attachHeroFocusHandlers() {
             var heroCards = document.querySelectorAll('.items-line[data-row-name="netflix_hero"] .card--wide');
@@ -1035,14 +1292,26 @@
                     }
                 });
 
-                // On focus - schedule trailer + scroll + update dots
+                // On focus - instant scroll + update dots (CSS handles fade via .focus class)
                 $(card).on('hover:focus.netflix-hero', function () {
-                    // Scroll to this card (carousel effect)
-                    card.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
-                    // Update dots indicator
-                    updateHeroDots(index);
+                    // Instant scroll - no animation, just snap
+                    card.scrollIntoView({ behavior: 'instant', inline: 'start', block: 'nearest' });
+
+                    // Get current index
+                    var allCards = document.querySelectorAll('.items-line[data-row-name="netflix_hero"] .card--wide');
+                    var currentIndex = Array.from(allCards).indexOf(card);
+
+                    // Update dots
+                    updateHeroDots(currentIndex);
                     // Schedule trailer
-                    TrailerManager.schedule(card, index);
+                    TrailerManager.schedule(card, currentIndex);
+
+                    // Load more when reaching last card
+                    console.log('Netflix Hero: Focus on card', currentIndex + 1, 'of', allCards.length, 'isLoading:', heroIsLoading);
+                    if (currentIndex >= allCards.length - 1 && !heroIsLoading) {
+                        console.log('Netflix Hero: Reached last card, loading more...');
+                        loadMoreHeroItems();
+                    }
                 });
 
                 // On blur - hide trailer
@@ -1070,10 +1339,7 @@
             }
             // Cleanup manager
             if (TrailerManager.timer) clearTimeout(TrailerManager.timer);
-            if (TrailerManager.iframe) {
-                TrailerManager.iframe.remove();
-                TrailerManager.iframe = null;
-            }
+            TrailerManager.destroy();
             // Remove dots
             var dots = document.querySelector('.netflix-hero-dots');
             if (dots) dots.remove();
