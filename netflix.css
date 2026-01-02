@@ -818,18 +818,14 @@ html {
     object-fit: cover;
 }
 
-/* Gradient overlay */
+/* Gradient overlay - Simplified for TV performance */
 .netflix-hero__gradient {
     position: absolute;
     bottom: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(to top,
-            rgba(20, 20, 20, 1) 0%,
-            rgba(20, 20, 20, 0.8) 30%,
-            rgba(20, 20, 20, 0.4) 60%,
-            transparent 100%);
+    background: linear-gradient(to top, rgba(20, 20, 20, 1) 0%, transparent 70%);
     z-index: 2;
 }
 
@@ -923,7 +919,6 @@ html {
     line-height: 1.1;
     color: #ffffff;
     margin-bottom: 1vw;
-    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
 }
 
 /* Meta info */
@@ -948,7 +943,6 @@ html {
     color: #ffffff;
     max-width: 40vw;
     margin-bottom: 2vw;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 /* Mobile responsive */
@@ -1066,12 +1060,7 @@ html {
     max-height: 800px !important;
     min-height: 450px !important;
     overflow: hidden !important;
-    /* Force GPU clipping for rounded corners */
-    transform: translateZ(0) !important;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-    -webkit-mask-image: -webkit-radial-gradient(white, black);
-    mask-image: -webkit-radial-gradient(white, black);
+    background-color: #141414 !important;
 }
 
 .items-line[data-row-name="netflix_hero"] .card--wide .card__body {
@@ -1081,7 +1070,6 @@ html {
     height: 100% !important;
 }
 
-/* На мобильных устройствах - адаптивные стили */
 @media screen and (max-width: 400px) {
     .items-line[data-row-name="netflix_hero"] .card--wide {
         width: 100% !important;
@@ -1109,24 +1097,21 @@ html {
     border-radius: 14px !important;
 }
 
-/* Gradient overlay */
+/* Gradient overlay - Super lightweight version */
 .items-line[data-row-name="netflix_hero"] .card--wide .card__promo {
     position: absolute !important;
     bottom: 0 !important;
     left: 0 !important;
     width: 100% !important;
-    height: 100% !important;
-    background: linear-gradient(to top,
-            rgba(20, 20, 20, 1) 0%,
-            transparent 80%) !important;
+    height: 60% !important;
+    /* Only cover the bottom 60% instead of full height */
+    background: linear-gradient(to top, rgba(20, 20, 20, 1) 0%, transparent 100%) !important;
     display: flex !important;
     flex-direction: column !important;
     justify-content: flex-end !important;
     padding: 4vw !important;
     box-sizing: border-box !important;
     z-index: 2 !important;
-    transform: translateZ(0) !important;
-    overflow: hidden !important;
 }
 
 /* Ensure ALL children of Hero view respect rounding */
@@ -1142,7 +1127,6 @@ html {
     font-weight: 700 !important;
     line-height: 1.1 !important;
     color: #ffffff !important;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5) !important;
     margin-bottom: 1vw !important;
 }
 
