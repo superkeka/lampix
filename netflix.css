@@ -1,6 +1,7 @@
 /**
  * Netflix Theme for Lampa
  * Full Netflix-style theme remake
+ * Version: 0.0.1
  *
  * Color Scheme:
  * - Background: #141414 (deep black)
@@ -142,12 +143,20 @@ a:hover,
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
 
-/* Focus indicator - red line at bottom of selected card image */
-/* Border is always present (transparent), just change color on focus - no layout shift */
+/* Focus indicator - red underline at bottom of card image */
+.card__view {
+    border-bottom: 4px solid transparent !important;
+}
+
 .card.focus .card__view,
 .card.hover .card__view,
 .card:hover .card__view {
     border-bottom-color: var(--netflix-red) !important;
+}
+
+/* Remove default Lampa focus ring */
+.card.focus .card__view::after {
+    display: none !important;
 }
 
 .card.focus .card__body,
@@ -164,10 +173,9 @@ a:hover,
 
 .card__view {
     position: relative !important;
-    overflow: hidden !important;
+    overflow: visible !important;
     border-radius: 12px !important;
-    /* Always have border to prevent layout shift, just change color on focus */
-    border-bottom: 4px solid transparent !important;
+    /* Border removed - pseudo-element used for underline */
     box-sizing: border-box !important;
 }
 
@@ -361,6 +369,17 @@ a:hover,
 .selectbox__item.focus {
     color: var(--netflix-red) !important;
     background-color: transparent !important;
+}
+
+/* === Settings Icons === */
+.settings__icon {
+    color: var(--netflix-text-muted) !important;
+    transition: color 0.2s ease !important;
+}
+
+.settings__item:hover .settings__icon,
+.settings__item.focus .settings__icon {
+    color: var(--netflix-bg) !important;
 }
 
 /* === Scrollbar === */
@@ -605,8 +624,9 @@ html {
 /* === Card Image Container === */
 .card__view {
     position: relative !important;
-    overflow: hidden !important;
+    overflow: visible !important;
     border-radius: 12px !important;
+    /* Border removed - pseudo-element used for underline */
 }
 
 
@@ -792,6 +812,7 @@ html {
 
 .netflix-hero.focus {
     outline: none;
+    box-shadow: inset 0 -4px 0 var(--netflix-red);
 }
 
 /* Hide the items-line title when it's just a space (hero row) */
@@ -825,27 +846,6 @@ html {
     height: 100%;
     background: linear-gradient(to top, rgba(20, 20, 20, 1) 0%, rgba(20, 20, 20, 0.4) 100%);
     z-index: 2;
-}
-
-.netflix-hero.focus::before,
-.netflix-hero.focus::after {
-    content: '';
-    position: absolute;
-    left: 1.5em;
-    right: 1.5em;
-    height: 4px;
-    background: #e50914;
-    z-index: 10;
-}
-
-.netflix-hero.focus::before {
-    top: -4px;
-    border-radius: 4px 4px 0 0;
-}
-
-.netflix-hero.focus::after {
-    bottom: -4px;
-    border-radius: 0 0 4px 4px;
 }
 
 /* Content layout (CSS Grid) */
@@ -1095,8 +1095,7 @@ html {
     border-radius: 16px !important;
     overflow: hidden !important;
     transform: translateZ(0) !important;
-    /* Invisible border for focus - no layout jump */
-    border-bottom: 4px solid transparent !important;
+    /* Border removed - pseudo-element used for underline */
     box-sizing: border-box !important;
 }
 
@@ -1138,11 +1137,6 @@ html {
 /* Video iframe above gradient */
 .items-line[data-row-name="netflix_hero"] .card--wide .card__view iframe {
     z-index: 3 !important;
-}
-
-/* Focus indicator - show red border on focus */
-.items-line[data-row-name="netflix_hero"] .card--wide.focus .card__view {
-    border-bottom-color: var(--netflix-red) !important;
 }
 
 /* Left gradient removed - cleaner look */
