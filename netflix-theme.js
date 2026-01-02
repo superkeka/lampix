@@ -69,7 +69,7 @@
             var container = document.createElement('div');
             container.className = 'netflix-header-tabs';
             container.innerHTML =
-                '<svg class="netflix-search-icon selector" data-action="search" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<svg class="netflix-search-icon selector" data-action="search" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
                 '<circle cx="11" cy="11" r="8"/>' +
                 '<path d="M21 21l-4.35-4.35"/>' +
                 '</svg>' +
@@ -210,10 +210,10 @@
                 showLLogo();
 
                 // NEW: Add text tabs
-                setTimeout(function () {
+                requestAnimationFrame(function () {
                     createHeaderTabs();
                     hideHeaderIcons();
-                }, 500); // Wait for icons initialization
+                });
 
             } else {
                 if (headStyle) {
@@ -279,8 +279,8 @@
                 });
             }
 
-            // Fallback: check every 3 seconds (6 times less frequent than before)
-            logoFallbackInterval = setInterval(updateLogo, 3000);
+            // Fallback: check every 10 seconds (redundant now with CSS but keeps it robust)
+            logoFallbackInterval = setInterval(updateLogo, 10000);
         }
 
         function hideLLogo() {
@@ -333,22 +333,33 @@
                     display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
-                    width: auto !important;
-                    min-width: 2em !important;
-                    height: auto !important;
-                    padding: 0.2em !important;
+                    width: 30px !important;
+                    min-width: 30px !important;
+                    height: 40px !important;
+                    padding: 0 !important;
+                    position: relative !important;
+                    margin-right: 20px !important;
                 }
                 /* Hide original logo content */
                 .head__logo-icon > span,
                 .head__logo-icon > img {
                     display: none !important;
                 }
-                /* Show our Netflix SVG */
+                /* Show our Netflix SVG via pseudo-element for instant load */
+                .head__logo-icon::before {
+                    content: '';
+                    display: block;
+                    width: 26px;
+                    height: 34px;
+                    background-image: url("data:image/svg+xml,%3Csvg width='20' height='28' viewBox='0 0 20 28' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='netflixGrad' x1='0%25' y1='0%25' x2='0%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23E50914;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%23B20710;stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='2' y='3' width='5' height='22' fill='url(%23netflixGrad)' rx='0.5'/%3E%3Crect x='2' y='20' width='16' height='5' fill='url(%23netflixGrad)' rx='0.5'/%3E%3C/svg%3E");
+                    background-repeat: no-repeat;
+                    background-position: center;
+                    background-size: contain;
+                    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+                }
+                /* Hide JS-injected SVG to avoid duplication */
                 .head__logo-icon > svg {
-                    display: block !important;
-                    width: 26px !important;
-                    height: 34px !important;
-                    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)) !important;
+                    display: none !important;
                 }
                 .head__actions {
                     margin-left: auto !important;
@@ -442,23 +453,6 @@
         // Additional CSS styles (WITHOUT Hero)
         function getNetflixExtraStyles() {
             return `
-                /* Row Animation */
-                .items-line {
-                    animation: fadeInRow 0.5s ease forwards;
-                    opacity: 0;
-                }
-
-                @keyframes fadeInRow {
-                    from {
-                        opacity: 0;
-                        transform: translateY(20px);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
-                }
-
                 /* Hide scrollbar but keep functionality */
                 .scroll--vertical::-webkit-scrollbar {
                     width: 6px;
@@ -540,14 +534,43 @@
             },
 
             attachErrorListener: function () {
+                var _this = this;
                 window.addEventListener('message', function (event) {
                     try {
-                        if (event.origin.indexOf('youtube.com') !== -1) {
-                            var data = JSON.parse(event.data);
-                            if (data.event === 'infoDelivery' && data.info && data.info.error) {
-                                var code = typeof data.info.error === 'object' ? data.info.error.code : data.info.error;
-                                console.error('Netflix Hero: YouTube Player Error', code, data);
+                        var data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                        if (!data) return;
+
+                        // 1. Handling video play (redundant but good for syncing state)
+                        // onStateChange: 1 (playing) OR infoDelivery + playerState: 1
+                        var isPlaying = (data.event === 'onStateChange' && data.info === 1) ||
+                            (data.event === 'infoDelivery' && data.info && data.info.playerState === 1);
+
+                        if (isPlaying && _this.currentCard && _this.iframe) {
+                            if (_this.timer) clearTimeout(_this.timer);
+                            _this.iframe.style.opacity = '1';
+                            var backdrop = _this.currentCard.querySelector('.card__img');
+                            if (backdrop) backdrop.style.opacity = '0.3';
+                        }
+
+                        // 2. Handling errors (including age restricted)
+                        var isError = (data.event === 'infoDelivery' && data.info && data.info.error) ||
+                            (data.event === 'onError');
+
+                        if (isError) {
+                            console.error('Netflix Hero: Player Error', data);
+                            if (_this.currentCard) {
+                                Lampa.Noty.show('Трейлер недоступен (ограничение)');
+                                _this.hide(_this.currentCard);
                             }
+                        }
+
+                        // 3. Handling video end (to hide "More Videos")
+                        var isEnded = (data.event === 'onStateChange' && data.info === 0) ||
+                            (data.event === 'infoDelivery' && data.info && data.info.playerState === 0);
+
+                        if (isEnded && _this.currentCard) {
+                            console.log('Netflix Hero: Video ended, hiding player');
+                            _this.hide(_this.currentCard);
                         }
                     } catch (e) { }
                 });
@@ -623,7 +646,7 @@
                     // Note: proxy creates its own iframe, so we listen on window as before
                 } else {
                     // Standard Embed for Desktop/Mobile
-                    src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + key + '&start=7&enablejsapi=1';
+                    src = 'https://www.youtube.com/embed/' + key + '?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&loop=0&playlist=' + key + '&start=7&enablejsapi=1&disablekb=1&widget_referrer=' + encodeURIComponent(window.location.href);
                 }
 
                 // Only update src if changed to avoid reloading
@@ -631,17 +654,19 @@
                     iframeToUse.src = src;
                 }
 
-                // Show after small delay to allow buffer
+                // Show after load (classic way) to ensure it works even if events fail
                 iframeToUse.onload = function () {
                     setTimeout(function () {
                         if (_this.currentCard === card && card.classList.contains('focus')) {
                             iframeToUse.style.opacity = '1';
-                            // Dim backdrop
                             var backdrop = card.querySelector('.card__img');
                             if (backdrop) backdrop.style.opacity = '0.3';
                         }
-                    }, 500);
+                    }, 1000);
                 };
+
+                // Safety Check: Hide if error occurs (we detect this via messages above)
+                if (this.timer) clearTimeout(this.timer);
             },
 
             hide: function (card) {
@@ -767,7 +792,7 @@
                                         if (!fullData.backdrop_path) fullData.backdrop_path = heroItem.backdrop_path || fullData.poster_path;
 
                                         if (fullData.backdrop_path) {
-                                            fullData.img = Lampa.Api.img(fullData.backdrop_path, 'original');
+                                            fullData.img = Lampa.Api.img(fullData.backdrop_path, 'w1280');
                                         }
 
                                         resolve({
@@ -777,7 +802,7 @@
                                     }, function () {
                                         // Fallback to basic data
                                         heroItem.params = { style: { name: 'wide' } };
-                                        if (heroItem.backdrop_path) heroItem.img = Lampa.Api.img(heroItem.backdrop_path, 'original');
+                                        if (heroItem.backdrop_path) heroItem.img = Lampa.Api.img(heroItem.backdrop_path, 'w1280');
 
                                         resolve({
                                             clickData: { id: heroItem.id, type: mediaType, data: heroItem },
@@ -819,7 +844,8 @@
                 title = lines[i].querySelector('.items-line__title');
                 if (title && title.textContent.indexOf('NETFLIX HERO') !== -1) {
                     lines[i].setAttribute('data-row-name', 'netflix_hero');
-                    console.log('Netflix Hero: marked row with data-row-name');
+                    lines[i].classList.add('netflix-hero');
+                    console.log('Netflix Hero: marked row with data-row-name and class');
 
                     // Load logos and attach focus handlers
                     setTimeout(function () {
@@ -1047,6 +1073,10 @@
                         if (typeof Lampa !== 'undefined' && Lampa.Storage) {
                             Lampa.Storage.set('content_rows_netflix_hero', 'false');
                         }
+                        // Force hide the row if it exists
+                        var row = document.querySelector('[data-row-name="netflix_hero"]');
+                        if (row) row.style.display = 'none';
+                        Lampa.Noty.show('Настройки применятся после перезагрузки или перехода');
                     }
                 }
             });
@@ -1101,19 +1131,19 @@
 
         function waitForLampa(callback) {
             if (typeof Lampa !== 'undefined' && typeof Lampa.SettingsApi !== 'undefined') {
-                setTimeout(callback, 500);
+                callback();
             } else {
                 var checkInterval = setInterval(function () {
                     if (typeof Lampa !== 'undefined' && typeof Lampa.SettingsApi !== 'undefined') {
                         clearInterval(checkInterval);
-                        setTimeout(callback, 500);
+                        callback();
                     }
                 }, 100);
 
                 setTimeout(function () {
                     clearInterval(checkInterval);
                     callback();
-                }, 5000);
+                }, 3000);
             }
         }
 
