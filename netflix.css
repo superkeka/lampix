@@ -113,7 +113,11 @@ a:hover,
     position: relative !important;
     border-radius: 12px !important;
     border-radius: 12px !important;
-    /* Removed will-change for performance on Tizen */
+    /* Universal optimizations */
+    backface-visibility: hidden !important;
+    -webkit-backface-visibility: hidden !important;
+    transform-style: preserve-3d !important;
+    contain: layout style !important;
 }
 
 .card__body {
@@ -1091,9 +1095,7 @@ html {
     height: 100% !important;
     background: linear-gradient(to top,
             rgba(20, 20, 20, 1) 0%,
-            rgba(20, 20, 20, 0.8) 20%,
-            rgba(20, 20, 20, 0.4) 50%,
-            transparent 100%) !important;
+            transparent 80%) !important;
     display: flex !important;
     flex-direction: column !important;
     justify-content: flex-end !important;
@@ -1185,25 +1187,4 @@ html {
 body:has(.items-line[data-row-name="netflix_hero"]) .scroll--mask {
     -webkit-mask-image: unset !important;
     mask-image: unset !important;
-}
-/* === Tizen (SmartTV) Optimizations === */
-.netflix-tizen .card,
-.netflix-tizen .card__body,
-.netflix-tizen .card__view,
-.netflix-tizen .card__title {
-    transition: none !important; /* Disable transitions for max FPS */
-}
-
-.netflix-tizen .card:hover,
-.netflix-tizen .card.focus,
-.netflix-tizen .card.hover {
-    transform: none !important; /* Disable scale */
-    z-index: 10 !important;
-}
-
-.netflix-tizen .card:hover .card__body,
-.netflix-tizen .card.focus .card__body,
-.netflix-tizen .card.hover .card__body {
-     /* Simplified shadow for Tizen */
-    box-shadow: 0 0 0 4px var(--netflix-red) !important;
 }
