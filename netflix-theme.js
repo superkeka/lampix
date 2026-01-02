@@ -1,7 +1,7 @@
 /**
  * Netflix Theme Plugin for Lampa
  * Full main page remake in Netflix style
- * Without Hero section
+ * Version: 0.0.1
  */
 
 (function () {
@@ -501,16 +501,22 @@
                     display: none !important;
                 }
 
-                /* Hero focus: ONLY red bottom border */
+                /* Hero focus: Netflix-style red bottom line (using pseudo-element to prevent layout jump) */
                 .items-line[data-row-name="netflix_hero"] .card--wide.focus {
                     outline: none !important;
                     box-shadow: none !important;
-                    border: none !important;
-                    border-bottom: 4px solid #E50914 !important;
                 }
-                .items-line[data-row-name="netflix_hero"] .card--wide.focus .card__view {
-                    outline: none !important;
-                    box-shadow: none !important;
+                /* Red underline via pseudo-element on .card (not .card__view which has overflow:hidden) */
+                .items-line[data-row-name="netflix_hero"] .card--wide.focus::after {
+                    content: '' !important;
+                    position: absolute !important;
+                    bottom: 0 !important;
+                    left: 0 !important;
+                    width: 100% !important;
+                    height: 4px !important;
+                    background: #E50914 !important;
+                    z-index: 10 !important;
+                    pointer-events: none !important;
                 }
 
                 /* Responsive */
@@ -761,12 +767,16 @@
                 var containerWidth = cardView.offsetWidth || 800;
                 var containerHeight = cardView.offsetHeight || 450;
 
+                // Get origin for postMessage (required for Tizen/special platforms)
+                var playerOrigin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+
                 // Create YT.Player like Lampa does
                 this.player = new YT.Player(this.playerId, {
                     width: containerWidth * 1.78,  // 177.77% for zoom effect
                     height: containerHeight * 1.78,
                     videoId: key,
                     playerVars: {
+                        'origin': playerOrigin,    // Required for postMessage on Tizen
                         'autoplay': 1,
                         'mute': 1,
                         'controls': 0,          // Hide controls
@@ -1272,25 +1282,6 @@
             if (heroCards.length === 0) return;
 
             heroCards.forEach(function (card, index) {
-                // On click/Enter - open details page
-                $(card).on('hover:enter.netflix-hero', function () {
-                    if (!heroItemsData[index]) return;
-
-                    var itemData = heroItemsData[index];
-                    var movieData = itemData.data;
-
-                    if (typeof Lampa !== 'undefined' && typeof Lampa.Activity !== 'undefined') {
-                        Lampa.Activity.push({
-                            url: '',
-                            component: 'full',
-                            id: itemData.id,
-                            method: itemData.type,
-                            card: movieData,
-                            source: 'tmdb'
-                        });
-                    }
-                });
-
                 // On focus - instant scroll + update dots (CSS handles fade via .focus class)
                 $(card).on('hover:focus.netflix-hero', function () {
                     // Instant scroll - no animation, just snap
@@ -1775,5 +1766,3 @@
 
     startPlugin();
 })();
-
-
