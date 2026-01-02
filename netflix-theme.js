@@ -517,10 +517,6 @@
             isSmartTV: /Tizen|Web0S|SmartTV|SMART-TV/i.test(navigator.userAgent),
 
             init: function () {
-                if (this.isSmartTV) {
-                    document.body.classList.add('netflix-tizen');
-                }
-
                 // Create shared iframe once for all platforms
                 if (!this.iframe) {
                     this.createIframe();
