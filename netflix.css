@@ -818,14 +818,14 @@ html {
     object-fit: cover;
 }
 
-/* Gradient overlay - Simplified for TV performance */
+/* Smooth 2-stop gradient - Darkened for better text contrast */
 .netflix-hero__gradient {
     position: absolute;
     bottom: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(to top, rgba(20, 20, 20, 1) 0%, transparent 70%);
+    background: linear-gradient(to top, rgba(20, 20, 20, 1) 0%, rgba(20, 20, 20, 0.4) 100%);
     z-index: 2;
 }
 
@@ -1009,71 +1009,82 @@ html {
 
 /* ==================== HERO SECTION ==================== */
 
-/* Netflix Hero - трансформация стандартной wide карточки Lampa */
+/* Netflix Hero - transformation of standard Lampa wide card */
 
-/* Hero row - только для нашего ряда по data атрибуту */
+/* Hero row - only for our row by data attribute */
 .items-line[data-row-name="netflix_hero"] {
-    margin-top: -6vh !important;
-    margin-bottom: 2vw !important;
+    margin-top: -2em !important;
+    margin-bottom: 1em !important;
     padding: 0 !important;
 }
 
-/* Скрываем заголовок для Hero ряда */
+/* Remove default body padding for hero row */
+.items-line[data-row-name="netflix_hero"] .items-line__body {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Hide title for Hero row */
 .items-line[data-row-name="netflix_hero"] .items-line__title {
     display: none !important;
 }
 
-/* Убираем лишние сбросы отступов, чтобы Hero совпадал с обычными рядами */
-.items-line[data-row-name="netflix_hero"] .scroll,
-.items-line[data-row-name="netflix_hero"] .scroll__content,
-.items-line[data-row-name="netflix_hero"] .items {
-    border-radius: 14px !important;
+/* Remove padding/margin from head for Hero */
+.items-line[data-row-name="netflix_hero"] .items-line__head {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: 0 !important;
 }
 
-/* Скрываем overflow чтобы не было видно соседних карточек */
+/* Scroll container - clip to single card */
 .items-line[data-row-name="netflix_hero"] .scroll {
-    overflow: visible !important;
-    border-radius: 14px !important;
+    overflow: hidden !important;
+    border-radius: 16px !important;
 }
 
-/* Псевдоэлемент для правого отступа */
+.items-line[data-row-name="netflix_hero"] .scroll__content {
+    border-radius: 16px !important;
+}
+
+/* Items container - no gap, full width cards */
+.items-line[data-row-name="netflix_hero"] .items {
+    gap: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 16px !important;
+}
+
+/* Remove scroll body padding */
+.items-line[data-row-name="netflix_hero"] .scroll__body {
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 0 !important;
+}
+
 .items-line[data-row-name="netflix_hero"] .scroll__body::after {
-    content: "" !important;
-    display: block !important;
-    width: 1.5em !important;
-    height: 1px !important;
-    flex-shrink: 0 !important;
+    display: none !important;
 }
 
-/* На мобильных устройствах - меньше отступ справа */
-@media screen and (max-width: 400px) {
-    .items-line[data-row-name="netflix_hero"] .scroll__body::after {
-        width: 1.5em !important;
-    }
-}
-
-/* Превращаем wide карточку в Hero */
+/* Hero card */
 .items-line[data-row-name="netflix_hero"] .card--wide {
     position: relative !important;
-    width: 100% !important;
+    width: calc(100vw - 3em) !important;
     height: 70vh !important;
-    max-height: 800px !important;
-    min-height: 450px !important;
+    max-height: 750px !important;
+    min-height: 400px !important;
+    flex-shrink: 0 !important;
     overflow: hidden !important;
     background-color: #141414 !important;
+    border-radius: 16px !important;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
 }
 
 .items-line[data-row-name="netflix_hero"] .card--wide .card__body {
-    border-radius: 14px !important;
+    border-radius: 16px !important;
     overflow: hidden !important;
     background-color: transparent !important;
     height: 100% !important;
-}
-
-@media screen and (max-width: 400px) {
-    .items-line[data-row-name="netflix_hero"] .card--wide {
-        width: 100% !important;
-    }
 }
 
 /* Background image */
@@ -1083,7 +1094,7 @@ html {
     height: 100% !important;
     padding-bottom: 0 !important;
     background: transparent !important;
-    border-radius: 0 0 14px 14px !important;
+    border-radius: 16px !important;
     overflow: hidden !important;
     transform: translateZ(0) !important;
 }
@@ -1094,18 +1105,17 @@ html {
     width: 100% !important;
     height: 100% !important;
     object-fit: cover !important;
-    border-radius: 14px !important;
+    border-radius: 16px !important;
 }
 
-/* Gradient overlay - Super lightweight version */
+/* Simple 2-color bottom gradient (performant for TV) */
 .items-line[data-row-name="netflix_hero"] .card--wide .card__promo {
     position: absolute !important;
     bottom: 0 !important;
     left: 0 !important;
     width: 100% !important;
-    height: 60% !important;
-    /* Only cover the bottom 60% instead of full height */
-    background: linear-gradient(to top, rgba(20, 20, 20, 1) 0%, transparent 100%) !important;
+    height: 100% !important;
+    background: linear-gradient(to top, #141414 0%, transparent 50%) !important;
     display: flex !important;
     flex-direction: column !important;
     justify-content: flex-end !important;
@@ -1114,15 +1124,24 @@ html {
     z-index: 2 !important;
 }
 
-/* Ensure ALL children of Hero view respect rounding */
+/* Left gradient removed - cleaner look */
+
+/* Child elements border-radius */
 .items-line[data-row-name="netflix_hero"] .card--wide .card__view>*,
-.items-line[data-row-name="netflix_hero"] .card--wide .card__view img,
+.items-line[data-row-name="netflix_hero"] .card--wide .card__view>.card__img,
 .items-line[data-row-name="netflix_hero"] .card--wide .card__view iframe {
-    border-radius: 14px !important;
+    border-radius: 16px !important;
 }
 
-/* Promo title */
+/* Logo inside promo-title should not have border-radius */
+.items-line[data-row-name="netflix_hero"] .card--wide .card__promo-title img {
+    border-radius: 0 !important;
+}
+
+/* Promo title - above gradient */
 .items-line[data-row-name="netflix_hero"] .card--wide .card__promo-title {
+    position: relative !important;
+    z-index: 5 !important;
     font-size: 4vw !important;
     font-weight: 700 !important;
     line-height: 1.1 !important;
@@ -1130,8 +1149,10 @@ html {
     margin-bottom: 1vw !important;
 }
 
-/* Promo text (overview) */
+/* Promo text (overview) - above gradient */
 .items-line[data-row-name="netflix_hero"] .card--wide .card__promo-text {
+    position: relative !important;
+    z-index: 5 !important;
     font-size: 1.4vw !important;
     line-height: 1.5 !important;
     color: #ffffff !important;
@@ -1142,16 +1163,11 @@ html {
     overflow: hidden !important;
 }
 
-/* Card badges */
-.items-line[data-row-name="netflix_hero"] .card--wide .card__type {
-    position: absolute !important;
-    top: 2vw !important;
-    left: 2vw !important;
-    background: rgba(229, 9, 20, 0.9) !important;
-    color: #fff !important;
-    padding: 0.5em 1em !important;
-    font-size: 1.2vw !important;
-    border-radius: 4px !important;
+/* Hide rating and badges on hero cards */
+.items-line[data-row-name="netflix_hero"] .card--wide .card__type,
+.items-line[data-row-name="netflix_hero"] .card--wide .card__vote,
+.items-line[data-row-name="netflix_hero"] .card--wide .card__quality {
+    display: none !important;
 }
 
 /* Focus state */
@@ -1194,13 +1210,48 @@ html {
         max-width: 80% !important;
     }
 
-    .items-line[data-row-name="netflix_hero"] .card--wide .card__type {
-        font-size: 2.5vw !important;
-    }
 }
 
 /* When Hero is active, disable the mask/fading effect */
 body:has(.items-line[data-row-name="netflix_hero"]) .scroll--mask {
     -webkit-mask-image: unset !important;
     mask-image: unset !important;
+}
+
+/* Hero dots indicator */
+.netflix-hero-dots {
+    position: absolute;
+    bottom: 3vw;
+    right: 3vw;
+    display: flex;
+    gap: 6px;
+    z-index: 10;
+}
+
+.netflix-hero-dot {
+    width: 12px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.4);
+    transition: width 0.2s ease, background 0.2s ease;
+    cursor: pointer;
+}
+
+.netflix-hero-dot.active {
+    width: 28px;
+    background: #ffffff;
+}
+
+/* Network/Source logo */
+.netflix-hero-network-logo {
+    position: absolute;
+    top: 3vw;
+    right: 3vw;
+    height: 3vw;
+    min-height: 28px;
+    max-height: 50px;
+    max-width: 140px;
+    object-fit: contain;
+    opacity: 0.9;
+    z-index: 100;
+    filter: brightness(0) invert(1);
 }
